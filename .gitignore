@@ -17,10 +17,13 @@ venv/
 .idea/
 
 # Output files
-*.yml
-*.yaml
-!examples/*.yml
+examples/output/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
