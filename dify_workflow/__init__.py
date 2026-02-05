@@ -52,13 +52,25 @@ __all__ = [
     "QuestionClassifierNode",
     "ParameterExtractorNode",
     "ToolNode",
+    # Functions
+    "interactive",
+    "from_description",
+    "visualize",
 ]
 
 
-def interactive():
-    """Start interactive workflow builder session"""
+def interactive(lang: str = "en"):
+    """
+    Start interactive workflow builder session.
+    
+    Args:
+        lang: Language code ("en" for English, "zh" for Chinese)
+    
+    Returns:
+        Generated Workflow object
+    """
     from .interactive import interactive_session
-    return interactive_session()
+    return interactive_session(lang=lang)
 
 
 def from_description(description: str, **kwargs):
@@ -69,7 +81,11 @@ def from_description(description: str, **kwargs):
     
     Args:
         description: Natural language description of the workflow
-        **kwargs: Passed to AIWorkflowBuilder (api_key, base_url, model)
+        **kwargs: 
+            - api_key: OpenAI API key
+            - base_url: Custom API base URL
+            - model: LLM model to use (default: gpt-4)
+            - lang: Language ("en" or "zh")
     
     Returns:
         Workflow object
@@ -79,8 +95,24 @@ def from_description(description: str, **kwargs):
     builder = AIWorkflowBuilder(
         api_key=kwargs.get("api_key"),
         base_url=kwargs.get("base_url"),
+        lang=kwargs.get("lang", "en"),
     )
     return builder.build_from_description(
         description,
         model=kwargs.get("model", "gpt-4"),
     )
+
+
+def visualize(workflow, format: str = "ascii") -> str:
+    """
+    Generate a visualization of the workflow.
+    
+    Args:
+        workflow: The Workflow object to visualize
+        format: Output format - "ascii", "tree", or "mermaid"
+    
+    Returns:
+        String visualization
+    """
+    from .interactive import visualize as _visualize
+    return _visualize(workflow, format)

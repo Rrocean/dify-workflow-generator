@@ -10,10 +10,11 @@ A Python library to programmatically generate [Dify](https://dify.ai) workflow D
 - 🔧 Generate Dify-compatible YAML DSL from Python code
 - 🤖 **AI-powered generation** - Describe what you want in natural language
 - 💬 **Interactive builder** - Guided step-by-step workflow creation
+- 🌐 **Multi-language** - English and Chinese interface support
+- 🔄 **Multi-turn conversation** - AI asks follow-up questions for clarity
+- 📊 **Visualization** - Preview workflows as ASCII art, tree, or Mermaid diagrams
 - 🧩 Full support for all 14 Dify node types
-- 📤 Export workflows ready for direct import into Dify
-- ✅ Built-in validation for node configurations
-- 🖥️ CLI tool for automation
+- ✅ Built-in validation
 
 ## Installation
 
@@ -30,7 +31,7 @@ pip install -e ".[interactive]"
 ### 1. Python API
 
 ```python
-from dify_workflow import Workflow, LLMNode, StartNode, EndNode
+from dify_workflow import Workflow, LLMNode, StartNode, EndNode, visualize
 
 wf = Workflow(name="My AI Workflow", mode="workflow")
 
@@ -49,6 +50,10 @@ end = EndNode(outputs=[
 wf.add_nodes([start, llm, end])
 wf.connect(start, llm)
 wf.connect(llm, end)
+
+# Preview before export
+print(visualize(wf, "tree"))
+
 wf.export("my_workflow.yml")
 ```
 
@@ -59,51 +64,119 @@ from dify_workflow import from_description
 
 # Just describe what you want!
 wf = from_description(
-    "Create a translation workflow that takes text and target language as inputs, "
-    "uses GPT-4 to translate, and returns the result"
+    "创建一个翻译工作流，输入文本和目标语言，用 GPT-4 翻译后返回结果",
+    lang="zh"
 )
 wf.export("translator.yml")
 ```
 
-Or via CLI:
+Or via CLI with multi-turn conversation:
 ```bash
-dify-workflow ai "Create a customer support chatbot that answers questions about products"
+dify-workflow chat --lang zh
 ```
 
-### 3. Interactive Builder
+### 3. Interactive Builder (中文支持)
 
 ```bash
+# English
 dify-workflow interactive
+
+# 中文
+dify-workflow interactive --lang zh
 ```
 
-The interactive mode guides you through creating a workflow with questions:
+Example session:
 ```
-What would you like to name this workflow?
-> Customer Support Bot
+欢迎使用 Dify 工作流生成器！
 
-What should this workflow do?
-> Answer customer questions about our products
+请给这个工作流起个名字：
+> 翻译助手
 
-What inputs does the user need to provide?
-> question, product_category
+这个工作流要做什么？
+> 将文本翻译成指定语言
+
+用户需要提供哪些输入？
+> 文本, 目标语言
+
+需要调用外部 API 吗？(y/n)
+> n
 
 ...
+
+翻译助手 (workflow)
+
+`-- [>] 开始
+    `-- [*] AI处理
+        `-- [=] 结束
 ```
 
 ## CLI Commands
 
 ```bash
-# Interactive guided creation
+# Interactive guided creation (with language option)
 dify-workflow interactive
+dify-workflow interactive --lang zh
 
-# AI-powered generation from description
-dify-workflow ai "Your workflow description" -o output.yml
+# AI chat session (multi-turn conversation)
+dify-workflow chat
+dify-workflow chat --lang zh
+
+# One-shot AI generation
+dify-workflow ai "Create a customer support chatbot" -o support.yml
 
 # Build from Python file
 dify-workflow build my_workflow.py -o workflow.yml
 
 # Validate existing workflow
 dify-workflow validate workflow.yml
+
+# Visualize workflow
+dify-workflow visualize workflow.yml --format tree
+dify-workflow visualize workflow.yml --format mermaid -o diagram.md
+```
+
+## Visualization
+
+Three output formats available:
+
+### Tree View
+```
+My Workflow (workflow)
+
+`-- [>] Start
+    `-- [*] LLM
+        `-- [=] End
+```
+
+### ASCII Art
+```
++----------------------+
+|       Start         |
++----------------------+
+        [START]
+           |
+           v
++----------------------+
+|        LLM          |
++----------------------+
+         [LLM]
+           |
+           v
++----------------------+
+|        End          |
++----------------------+
+         [END]
+```
+
+### Mermaid Diagram
+```mermaid
+graph TD
+    start((Start))
+    llm[["LLM"]]
+    end[/End/]
+
+    start --> llm
+    llm --> end
 ```
 
 ## Supported Node Types
@@ -125,92 +198,60 @@ dify-workflow validate workflow.yml
 | Parameter Extractor | `ParameterExtractorNode` | Extract structured data |
 | Tool | `ToolNode` | Call external tools |
 
-## Examples
+## Multi-turn AI Conversation
 
-### Translation Workflow
+The AI builder asks clarifying questions when your description is ambiguous:
+
+```
+> Create a workflow that processes user requests
+
+I need a bit more information:
+
+- What kind of requests should it process?
+- Should it call any external APIs?
+- What should the output format be?
+
+> It should handle customer complaints, check order status via API, and respond politely
+
+Generated workflow: Customer Service Bot
+
+Customer Service Bot (workflow)
+
+`-- [>] Start
+    `-- [@] API Call
+        `-- [*] LLM
+            `-- [=] End
+```
+
+## API Reference
+
+### Main Functions
 
 ```python
-from dify_workflow import *
+# Create workflow programmatically
+from dify_workflow import Workflow, StartNode, LLMNode, EndNode
 
-wf = Workflow("Translator", mode="workflow")
+# Generate from natural language
+from dify_workflow import from_description
+wf = from_description("your description", lang="zh", model="gpt-4")
 
-start = StartNode(variables=[
-    {"name": "text", "type": "string", "required": True},
-    {"name": "target_lang", "type": "string", "default": "English"}
-])
+# Start interactive session
+from dify_workflow import interactive
+wf = interactive(lang="zh")
 
-translate = LLMNode(
-    title="translate",
-    model={"provider": "openai", "name": "gpt-4"},
-    prompt="""Translate to {{#start.target_lang#}}:
-{{#start.text#}}
-
-Output ONLY the translation.""",
-    temperature=0.3
-)
-
-end = EndNode(outputs=[
-    {"variable": "translation", "value_selector": ["translate", "text"]}
-])
-
-wf.add_nodes([start, translate, end])
-wf.connect(start, translate)
-wf.connect(translate, end)
-wf.export("translator.yml")
+# Visualize workflow
+from dify_workflow import visualize
+print(visualize(wf, format="tree"))  # or "ascii" or "mermaid"
 ```
 
-### Conditional Workflow
+### Workflow Methods
 
-```python
-from dify_workflow import *
-
-wf = Workflow("Router", mode="workflow")
-
-start = StartNode(variables=[
-    {"name": "query", "type": "string", "required": True}
-])
-
-condition = IfElseNode(
-    title="check_type",
-    conditions=[{
-        "variable_selector": ["start", "query"],
-        "comparison_operator": "contains",
-        "value": "code"
-    }]
-)
-
-code_llm = LLMNode(title="code_response", prompt="You are a coding expert...")
-general_llm = LLMNode(title="general_response", prompt="You are a helpful assistant...")
-end = EndNode(...)
-
-wf.add_nodes([start, condition, code_llm, general_llm, end])
-wf.connect(start, condition)
-wf.connect(condition, code_llm, source_handle="true")
-wf.connect(condition, general_llm, source_handle="false")
-wf.connect(code_llm, end)
-wf.connect(general_llm, end)
-```
-
-## DSL Format
-
-This library generates Dify DSL version `0.5.0` compatible files:
-
-```yaml
-version: "0.5.0"
-kind: app
-app:
-  name: My Workflow
-  mode: workflow
-  icon: "🤖"
-  icon_background: "#FFEAD5"
-workflow:
-  graph:
-    nodes: [...]
-    edges: [...]
-  features: {}
-  environment_variables: []
-  conversation_variables: []
-```
+- `add_node(node)` - Add a single node
+- `add_nodes([nodes])` - Add multiple nodes
+- `connect(source, target, source_handle, target_handle)` - Connect nodes
+- `validate()` - Check for issues
+- `export(path)` - Export to YAML/JSON file
+- `to_yaml()` / `to_json()` - Get string output
 
 ## Variable References
 

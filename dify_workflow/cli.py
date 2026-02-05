@@ -3,8 +3,10 @@ CLI for Dify Workflow Generator
 
 Usage:
     dify-workflow interactive    # Guided workflow creation
+    dify-workflow interactive --lang zh  # Chinese interface
     dify-workflow build <file>   # Build workflow from Python file
     dify-workflow ai "description"  # AI-powered generation
+    dify-workflow visualize <file>  # Visualize workflow
 """
 
 import argparse
@@ -15,33 +17,69 @@ import os
 def cmd_interactive(args):
     """Run interactive workflow builder"""
     from .interactive import interactive_session
-    interactive_session()
+    lang = args.lang or "en"
+    interactive_session(lang=lang)
 
 
 def cmd_ai(args):
-    """AI-powered workflow generation"""
-    from .interactive import AIWorkflowBuilder
+    """AI-powered workflow generation with multi-turn conversation"""
+    from .interactive import AIWorkflowBuilder, visualize
     
     description = args.description
     output = args.output or "workflow.yml"
-    
-    print(f"Analyzing: {description[:50]}...")
+    lang = args.lang or "en"
     
     builder = AIWorkflowBuilder(
         api_key=args.api_key or os.environ.get("OPENAI_API_KEY"),
         base_url=args.base_url,
+        lang=lang,
     )
     
+    if lang == "zh":
+        print(f"正在分析: {description[:50]}...")
+    else:
+        print(f"Analyzing: {description[:50]}...")
+    
     try:
-        workflow = builder.build_from_description(
+        complete, response, workflow = builder.chat(
             description,
             model=args.model or "gpt-4",
         )
         
-        workflow.export(output)
-        print(f"\n[OK] Created workflow: {workflow.name}")
-        print(f"Nodes: {len(workflow.nodes)}")
-        print(f"Saved to: {output}")
+        print(f"\n{response}")
+        
+        # Multi-turn conversation if needed
+        while not complete:
+            try:
+                if lang == "zh":
+                    user_input = input("\n请回答 (或输入 'done' 完成): ").strip()
+                else:
+                    user_input = input("\nYour response (or 'done' to finish): ").strip()
+                
+                if user_input.lower() in ('done', '完成', 'quit', 'exit'):
+                    if builder.current_intent:
+                        workflow = builder._build_from_intent(builder.current_intent)
+                        complete = True
+                    else:
+                        print("Cancelled." if lang == "en" else "已取消。")
+                        return
+                else:
+                    complete, response, workflow = builder.chat(
+                        user_input,
+                        model=args.model or "gpt-4",
+                    )
+                    print(f"\n{response}")
+                    
+            except KeyboardInterrupt:
+                print("\n\nCancelled." if lang == "en" else "\n\n已取消。")
+                return
+        
+        if workflow:
+            workflow.export(output)
+            if lang == "zh":
+                print(f"\n[OK] 工作流已保存: {output}")
+            else:
+                print(f"\n[OK] Workflow saved: {output}")
         
     except Exception as e:
         print(f"Error: {e}")
@@ -151,6 +189,182 @@ def cmd_validate(args):
         print(f"  Edges: {len(edges)}")
 
 
+def cmd_visualize(args):
+    """Visualize a workflow"""
+    import yaml
+    from .workflow import Workflow
+    from .interactive import visualize, WorkflowVisualizer
+    from .nodes import (
+        StartNode, EndNode, AnswerNode, LLMNode, HTTPNode,
+        CodeNode, IfElseNode, TemplateNode, KnowledgeNode,
+        VariableAggregatorNode, IterationNode, QuestionClassifierNode,
+        ParameterExtractorNode, ToolNode,
+    )
+    
+    filepath = args.file
+    fmt = args.format or "tree"
+    
+    if not os.path.exists(filepath):
+        print(f"Error: File not found: {filepath}")
+        sys.exit(1)
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+    
+    # Reconstruct workflow from YAML
+    app = data.get("app", {})
+    wf_data = data.get("workflow", {})
+    graph = wf_data.get("graph", {})
+    
+    wf = Workflow(
+        name=app.get("name", "Workflow"),
+        mode=app.get("mode", "workflow"),
+        description=app.get("description", ""),
+    )
+    
+    # Map node types to classes
+    node_classes = {
+        "start": StartNode,
+        "end": EndNode,
+        "answer": AnswerNode,
+        "llm": LLMNode,
+        "http-request": HTTPNode,
+        "code": CodeNode,
+        "if-else": IfElseNode,
+        "template-transform": TemplateNode,
+        "knowledge-retrieval": KnowledgeNode,
+        "variable-aggregator": VariableAggregatorNode,
+        "iteration": IterationNode,
+        "question-classifier": QuestionClassifierNode,
+        "parameter-extractor": ParameterExtractorNode,
+        "tool": ToolNode,
+    }
+    
+    # Recreate nodes
+    node_map = {}
+    for node_data in graph.get("nodes", []):
+        node_id = node_data.get("id")
+        data_section = node_data.get("data", {})
+        node_type = data_section.get("type", "start")
+        title = data_section.get("title", node_type)
+        
+        node_class = node_classes.get(node_type, StartNode)
+        node = node_class(title=title)
+        node.id = node_id
+        node.position_x = node_data.get("position", {}).get("x", 0)
+        node.position_y = node_data.get("position", {}).get("y", 0)
+        
+        wf.nodes.append(node)
+        node_map[node_id] = node
+    
+    # Recreate edges
+    wf.edges = graph.get("edges", [])
+    
+    # Visualize
+    output = visualize(wf, fmt)
+    print(output)
+    
+    # Optionally save mermaid to file
+    if fmt == "mermaid" and args.output:
+        with open(args.output, 'w', encoding='utf-8') as f:
+            f.write(output)
+        print(f"\nSaved to {args.output}")
+
+
+def cmd_chat(args):
+    """Start an AI chat session for workflow building"""
+    from .interactive import AIWorkflowBuilder, visualize
+    
+    lang = args.lang or "en"
+    
+    builder = AIWorkflowBuilder(
+        api_key=args.api_key or os.environ.get("OPENAI_API_KEY"),
+        base_url=args.base_url,
+        lang=lang,
+    )
+    
+    print("=" * 50)
+    if lang == "zh":
+        print("  Dify 工作流 AI 助手")
+        print("=" * 50)
+        print("\n描述你想要的工作流，我会帮你生成。")
+        print("输入 'save <文件名>' 保存，'quit' 退出。\n")
+    else:
+        print("  Dify Workflow AI Assistant")
+        print("=" * 50)
+        print("\nDescribe the workflow you want, and I'll generate it.")
+        print("Type 'save <filename>' to save, 'quit' to exit.\n")
+    
+    workflow = None
+    
+    while True:
+        try:
+            user_input = input("> ").strip()
+            
+            if not user_input:
+                continue
+            
+            if user_input.lower() in ('quit', 'exit', '退出'):
+                break
+            
+            if user_input.lower().startswith('save'):
+                if workflow:
+                    parts = user_input.split(maxsplit=1)
+                    filename = parts[1] if len(parts) > 1 else "workflow.yml"
+                    workflow.export(filename)
+                    if lang == "zh":
+                        print(f"\n[OK] 已保存到 {filename}\n")
+                    else:
+                        print(f"\n[OK] Saved to {filename}\n")
+                else:
+                    if lang == "zh":
+                        print("\n还没有生成工作流，请先描述你的需求。\n")
+                    else:
+                        print("\nNo workflow generated yet. Describe what you need first.\n")
+                continue
+            
+            if user_input.lower() == 'reset':
+                builder.reset()
+                workflow = None
+                if lang == "zh":
+                    print("\n已重置，请重新描述你的需求。\n")
+                else:
+                    print("\nReset. Describe what you need.\n")
+                continue
+            
+            if user_input.lower() in ('show', 'preview', '预览'):
+                if workflow:
+                    print("\n" + visualize(workflow, "tree") + "\n")
+                else:
+                    if lang == "zh":
+                        print("\n还没有生成工作流。\n")
+                    else:
+                        print("\nNo workflow generated yet.\n")
+                continue
+            
+            # Chat with AI
+            complete, response, wf = builder.chat(
+                user_input,
+                model=args.model or "gpt-4",
+            )
+            
+            print(f"\n{response}\n")
+            
+            if wf:
+                workflow = wf
+                
+        except KeyboardInterrupt:
+            print("\n")
+            break
+        except Exception as e:
+            print(f"\nError: {e}\n")
+    
+    if lang == "zh":
+        print("再见！")
+    else:
+        print("Goodbye!")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Dify Workflow Generator CLI",
@@ -158,9 +372,12 @@ def main():
         epilog="""
 Examples:
   dify-workflow interactive
-  dify-workflow ai "Create a translation workflow that takes text and target language"
+  dify-workflow interactive --lang zh
+  dify-workflow chat --lang zh
+  dify-workflow ai "Create a translation workflow"
   dify-workflow build my_workflow.py -o output.yml
   dify-workflow validate workflow.yml
+  dify-workflow visualize workflow.yml --format tree
         """,
     )
     
@@ -171,7 +388,21 @@ Examples:
         "interactive", aliases=["i"],
         help="Guided interactive workflow creation"
     )
+    p_interactive.add_argument("--lang", "-l", choices=["en", "zh"], 
+                               help="Language (en=English, zh=Chinese)")
     p_interactive.set_defaults(func=cmd_interactive)
+    
+    # Chat command (multi-turn AI conversation)
+    p_chat = subparsers.add_parser(
+        "chat", aliases=["c"],
+        help="AI chat session for workflow building"
+    )
+    p_chat.add_argument("--lang", "-l", choices=["en", "zh"],
+                        help="Language (en=English, zh=Chinese)")
+    p_chat.add_argument("--model", help="LLM model to use (default: gpt-4)")
+    p_chat.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY)")
+    p_chat.add_argument("--base-url", help="Custom API base URL")
+    p_chat.set_defaults(func=cmd_chat)
     
     # AI command
     p_ai = subparsers.add_parser(
@@ -180,6 +411,8 @@ Examples:
     )
     p_ai.add_argument("description", help="Natural language description of the workflow")
     p_ai.add_argument("-o", "--output", help="Output file path (default: workflow.yml)")
+    p_ai.add_argument("--lang", "-l", choices=["en", "zh"],
+                      help="Language (en=English, zh=Chinese)")
     p_ai.add_argument("--model", help="LLM model to use (default: gpt-4)")
     p_ai.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY)")
     p_ai.add_argument("--base-url", help="Custom API base URL")
@@ -201,6 +434,17 @@ Examples:
     )
     p_validate.add_argument("file", help="YAML file to validate")
     p_validate.set_defaults(func=cmd_validate)
+    
+    # Visualize command
+    p_viz = subparsers.add_parser(
+        "visualize", aliases=["viz"],
+        help="Visualize a workflow"
+    )
+    p_viz.add_argument("file", help="YAML file to visualize")
+    p_viz.add_argument("-f", "--format", choices=["ascii", "tree", "mermaid"],
+                       default="tree", help="Output format (default: tree)")
+    p_viz.add_argument("-o", "--output", help="Save visualization to file (for mermaid)")
+    p_viz.set_defaults(func=cmd_visualize)
     
     args = parser.parse_args()
     
