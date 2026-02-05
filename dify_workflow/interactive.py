@@ -336,6 +336,7 @@ class InteractiveBuilder:
             title="Start" if self.lang == "en" else "开始",
             variables=self.intent.input_variables
         )
+        start.id = "start"  # Force ID for easier referencing
         wf.add_node(start)
         
         last_node = start

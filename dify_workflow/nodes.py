@@ -561,3 +561,97 @@ class ToolNode(Node):
             "tool_name": self.tool_name,
             "tool_parameters": self.tool_parameters,
         }
+
+
+@dataclass
+class AssignerNode(Node):
+    """
+    Variable assigner node.
+    
+    Args:
+        output_type: Type of the variable being assigned
+        target_variable: Name of the variable to write to (for conversation variables)
+        source_variable_selector: Source variable selector to read from
+    """
+    
+    _node_type: str = "assigner"
+    output_type: str = "string"
+    target_variable: str = ""
+    source_variable_selector: List[str] = field(default_factory=list)
+    
+    def __post_init__(self):
+        if not self.title:
+            self.title = "Variable Assigner"
+            
+    def _get_data(self) -> Dict[str, Any]:
+        return {
+            "output_type": self.output_type,
+            "target_variable": self.target_variable,
+            "variable_selector": self.source_variable_selector,
+            "write_mode": "overwrite",
+        }
+
+
+@dataclass
+class DocumentExtractorNode(Node):
+    """
+    Document extractor node.
+    
+    Args:
+        variable_selector: Input file variable selector
+    """
+    
+    _node_type: str = "document-extractor"
+    variable_selector: List[str] = field(default_factory=list)
+    
+    def __post_init__(self):
+        if not self.title:
+            self.title = "Doc Extractor"
+            
+    def _get_data(self) -> Dict[str, Any]:
+        return {
+            "variable_selector": self.variable_selector,
+            "is_array": False,
+        }
+
+
+@dataclass
+class ListFilterNode(Node):
+    """
+    List filter node.
+    
+    Args:
+        variable_selector: List variable to filter
+        conditions: Filter conditions
+    """
+    
+    _node_type: str = "list-filter"
+    variable_selector: List[str] = field(default_factory=list)
+    conditions: List[Dict[str, Any]] = field(default_factory=list)
+    limit: int = 0
+    order_by: str = ""
+    desc: bool = False
+    
+    def __post_init__(self):
+        if not self.title:
+            self.title = "List Filter"
+            
+    def _get_data(self) -> Dict[str, Any]:
+        return {
+            "variable_selector": self.variable_selector,
+            "filter_condition": {
+                "logical_operator": "and",
+                "conditions": [
+                     {
+                        "id": _generate_id(),
+                        "key": c.get("key", ""),
+                        "comparison_operator": c.get("operator", "contains"),
+                        "value": c.get("value", ""),
+                    }
+                    for c in self.conditions
+                ]
+            },
+            "limit": self.limit,
+            "order_by": self.order_by,
+            "desc": self.desc,
+        }

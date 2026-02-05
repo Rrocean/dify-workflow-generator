@@ -52,6 +52,9 @@ __all__ = [
     "QuestionClassifierNode",
     "ParameterExtractorNode",
     "ToolNode",
+    "AssignerNode",
+    "DocumentExtractorNode",
+    "ListFilterNode",
     # Functions
     "interactive",
     "from_description",

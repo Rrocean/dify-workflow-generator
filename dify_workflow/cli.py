@@ -86,6 +86,28 @@ def cmd_ai(args):
         sys.exit(1)
 
 
+def cmd_import(args):
+    """Import Dify YAML to Python"""
+    from .importer import import_workflow
+    
+    input_file = args.file
+    output_file = args.output
+    
+    if not os.path.exists(input_file):
+        print(f"Error: File not found: {input_file}")
+        sys.exit(1)
+        
+    if not output_file:
+        output_file = os.path.splitext(input_file)[0] + ".py"
+        
+    try:
+        import_workflow(input_file, output_file)
+        print(f"[OK] Converted {input_file} -> {output_file}")
+    except Exception as e:
+        print(f"Error importing workflow: {e}")
+        sys.exit(1)
+
+
 def cmd_build(args):
     """Build workflow from Python file"""
     import importlib.util
@@ -365,6 +387,28 @@ def cmd_chat(args):
         print("Goodbye!")
 
 
+def cmd_template(args):
+    """Manage workflow templates"""
+    from .templates import TEMPLATES
+    
+    if args.action == "list":
+        print("Available templates:")
+        for name, func in TEMPLATES.items():
+            doc = func.__doc__ or "No description"
+            print(f"  {name:15} - {doc}")
+            
+    elif args.action == "create":
+        name = args.name
+        if name not in TEMPLATES:
+            print(f"Error: Template '{name}' not found. Use 'list' to see available templates.")
+            sys.exit(1)
+            
+        wf = TEMPLATES[name]()
+        output = args.output or f"{name}.yml"
+        wf.export(output)
+        print(f"[OK] Created {output} from template '{name}'")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Dify Workflow Generator CLI",
@@ -403,6 +447,15 @@ Examples:
     p_chat.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY)")
     p_chat.add_argument("--base-url", help="Custom API base URL")
     p_chat.set_defaults(func=cmd_chat)
+    
+    # Import command
+    p_import = subparsers.add_parser(
+        "import",
+        help="Convert Dify YAML to Python code"
+    )
+    p_import.add_argument("file", help="YAML file to import")
+    p_import.add_argument("-o", "--output", help="Output Python file path")
+    p_import.set_defaults(func=cmd_import)
     
     # AI command
     p_ai = subparsers.add_parser(
@@ -445,6 +498,21 @@ Examples:
                        default="tree", help="Output format (default: tree)")
     p_viz.add_argument("-o", "--output", help="Save visualization to file (for mermaid)")
     p_viz.set_defaults(func=cmd_visualize)
+    
+    # Template command
+    p_tpl = subparsers.add_parser(
+        "template", aliases=["tpl"],
+        help="Use workflow templates"
+    )
+    p_tpl_sub = p_tpl.add_subparsers(dest="action", help="Template action")
+    
+    p_tpl_list = p_tpl_sub.add_parser("list", help="List available templates")
+    
+    p_tpl_create = p_tpl_sub.add_parser("create", help="Create from template")
+    p_tpl_create.add_argument("name", help="Template name")
+    p_tpl_create.add_argument("-o", "--output", help="Output file path")
+    
+    p_tpl.set_defaults(func=cmd_template)
     
     args = parser.parse_args()
     

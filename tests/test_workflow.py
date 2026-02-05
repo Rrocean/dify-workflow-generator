@@ -178,10 +178,13 @@ class TestFullWorkflow:
         start = StartNode(variables=[
             {"name": "input", "type": "string", "required": True}
         ])
+        # Manually set ID for easier testing or reference dynamic ID
+        start.id = "start_node"
         
         llm = LLMNode(
             title="process",
-            prompt="Process: {{#start.input#}}"
+            # Use the actual ID in the reference
+            prompt="Process: {{#start_node.input#}}"
         )
         
         end = EndNode(outputs=[

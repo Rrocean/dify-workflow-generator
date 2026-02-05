@@ -261,10 +261,31 @@ class Workflow:
             connected_ids.add(edge["source"])
             connected_ids.add(edge["target"])
         
+        node_map = {n.id: n for n in self.nodes}
+        node_titles = {n.title: n.id for n in self.nodes}
+        
         for node in self.nodes:
             if node.id not in connected_ids and not isinstance(node, StartNode):
                 issues.append(f"Warning: Node '{node.title}' ({node.id}) is not connected")
-        
+                
+            # Validate variable references in node data
+            # Check {{#node_id.var#}} pattern
+            import re
+            data_str = str(node.to_dict())
+            
+            # Pattern for template refs: {{#node_id.var#}}
+            refs = re.findall(r"\{\{#([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)#\}\}", data_str)
+            for ref_node_id, ref_var in refs:
+                # Handle title references (if user used title instead of ID)
+                if ref_node_id not in node_map and ref_node_id not in node_titles:
+                     # It might be a conversation variable
+                     if ref_node_id not in ["sys", "env", "conversation"]:
+                        issues.append(f"Error: Node '{node.title}' references unknown node '{ref_node_id}'")
+            
+            # Pattern for value selectors: ['node_id', 'var']
+            # This is harder to regex reliably on string repr, but we can try a basic check
+            # Real validation would traverse the dict
+            
         return issues
     
     def __repr__(self) -> str:
