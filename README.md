@@ -3,35 +3,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-A Python library to programmatically generate [Dify](https://dify.ai) workflow DSL files. Create complex AI workflows with code and import them directly into Dify.
+A Python library to programmatically generate [Dify](https://dify.ai) workflow DSL files. Create complex AI workflows with code, natural language, or interactive guidance.
 
 ## Features
 
 - 🔧 Generate Dify-compatible YAML DSL from Python code
-- 🧩 Full support for all Dify node types (Start, End, LLM, HTTP, Code, Condition, etc.)
+- 🤖 **AI-powered generation** - Describe what you want in natural language
+- 💬 **Interactive builder** - Guided step-by-step workflow creation
+- 🧩 Full support for all 14 Dify node types
 - 📤 Export workflows ready for direct import into Dify
-- 🔗 Fluent API for easy node connections
 - ✅ Built-in validation for node configurations
-- 🎯 Auto-positioning of nodes on canvas
+- 🖥️ CLI tool for automation
 
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+# Basic installation
+pip install -e .
+
+# With AI generation support
+pip install -e ".[interactive]"
 ```
 
 ## Quick Start
 
+### 1. Python API
+
 ```python
 from dify_workflow import Workflow, LLMNode, StartNode, EndNode
 
-# Create a workflow
-wf = Workflow(
-    name="My AI Workflow",
-    mode="workflow"  # or "advanced-chat"
-)
+wf = Workflow(name="My AI Workflow", mode="workflow")
 
-# Add nodes
 start = StartNode(variables=[
     {"name": "query", "type": "string", "required": True}
 ])
@@ -44,35 +46,64 @@ end = EndNode(outputs=[
     {"variable": "result", "value_selector": ["llm", "text"]}
 ])
 
-# Build workflow
 wf.add_nodes([start, llm, end])
 wf.connect(start, llm)
 wf.connect(llm, end)
-
-# Export to YAML (ready for Dify import)
 wf.export("my_workflow.yml")
 ```
 
-## DSL Format
+### 2. Natural Language (AI-powered)
 
-This library generates Dify DSL version `0.5.0` compatible files:
+```python
+from dify_workflow import from_description
 
-```yaml
-version: "0.5.0"
-kind: app
-app:
-  name: My Workflow
-  mode: workflow
-  icon: "🤖"
-  icon_background: "#FFEAD5"
-  description: ""
-workflow:
-  graph:
-    nodes: [...]
-    edges: [...]
-  features: {}
-  environment_variables: []
-  conversation_variables: []
+# Just describe what you want!
+wf = from_description(
+    "Create a translation workflow that takes text and target language as inputs, "
+    "uses GPT-4 to translate, and returns the result"
+)
+wf.export("translator.yml")
+```
+
+Or via CLI:
+```bash
+dify-workflow ai "Create a customer support chatbot that answers questions about products"
+```
+
+### 3. Interactive Builder
+
+```bash
+dify-workflow interactive
+```
+
+The interactive mode guides you through creating a workflow with questions:
+```
+What would you like to name this workflow?
+> Customer Support Bot
+
+What should this workflow do?
+> Answer customer questions about our products
+
+What inputs does the user need to provide?
+> question, product_category
+
+...
+```
+
+## CLI Commands
+
+```bash
+# Interactive guided creation
+dify-workflow interactive
+
+# AI-powered generation from description
+dify-workflow ai "Your workflow description" -o output.yml
+
+# Build from Python file
+dify-workflow build my_workflow.py -o workflow.yml
+
+# Validate existing workflow
+dify-workflow validate workflow.yml
 ```
 
 ## Supported Node Types
@@ -139,7 +170,6 @@ start = StartNode(variables=[
     {"name": "query", "type": "string", "required": True}
 ])
 
-# Condition based on query content
 condition = IfElseNode(
     title="check_type",
     conditions=[{
@@ -149,10 +179,8 @@ condition = IfElseNode(
     }]
 )
 
-# Two different LLM responses
-code_llm = LLMNode(title="code_response", ...)
-general_llm = LLMNode(title="general_response", ...)
-
+code_llm = LLMNode(title="code_response", prompt="You are a coding expert...")
+general_llm = LLMNode(title="general_response", prompt="You are a helpful assistant...")
 end = EndNode(...)
 
 wf.add_nodes([start, condition, code_llm, general_llm, end])
@@ -163,32 +191,30 @@ wf.connect(code_llm, end)
 wf.connect(general_llm, end)
 ```
 
-## API Reference
+## DSL Format
 
-### Workflow
+This library generates Dify DSL version `0.5.0` compatible files:
 
-```python
-Workflow(
-    name: str,
-    mode: str = "workflow",  # "workflow" or "advanced-chat"
-    description: str = "",
-    icon: str = "🤖",
-    icon_background: str = "#FFEAD5"
-)
+```yaml
+version: "0.5.0"
+kind: app
+app:
+  name: My Workflow
+  mode: workflow
+  icon: "🤖"
+  icon_background: "#FFEAD5"
+workflow:
+  graph:
+    nodes: [...]
+    edges: [...]
+  features: {}
+  environment_variables: []
+  conversation_variables: []
 ```
-
-### Node Methods
-
-- `add_node(node)` - Add a single node
-- `add_nodes([nodes])` - Add multiple nodes
-- `connect(source, target, source_handle="source", target_handle="target")` - Connect nodes
-- `export(path)` - Export to YAML file
-- `to_yaml()` - Get YAML string
-- `to_dict()` - Get dictionary
 
 ## Variable References
 
-Dify uses a specific syntax for referencing variables:
+Dify uses specific syntax for referencing variables:
 
 - `{{#node_id.variable#}}` - In prompts/templates
 - `["node_id", "variable"]` - In value_selector fields
