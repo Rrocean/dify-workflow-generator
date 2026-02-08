@@ -205,6 +205,16 @@ from .testing import (
     run_tests,
 )
 
+# Agent Teams (Opus 4.6)
+from .agent_teams import (
+    DifyWorkflowAgentTeam,
+    AgentConfig,
+    AgentRole,
+    TaskResult,
+    AgentTeamCLI,
+    create_workflow_with_agents,
+)
+
 __version__ = "0.5.0"
 __dsl_version__ = DSL_VERSION
 
@@ -350,6 +360,13 @@ __all__ = [
     "create_test_suite",
     "load_test_suite",
     "run_tests",
+    # Agent Teams (Opus 4.6)
+    "DifyWorkflowAgentTeam",
+    "AgentConfig",
+    "AgentRole",
+    "TaskResult",
+    "AgentTeamCLI",
+    "create_workflow_with_agents",
     # Functions
     "interactive",
     "from_description",
