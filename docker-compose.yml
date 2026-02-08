@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8765:8765"
+    environment:
+      - DIFY_WORKFLOW_ENV=production
+      - DIFY_WORKFLOW_DB_URL=sqlite:///data/workflows.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./workflows:/app/workflows
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/api/templates"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8765:8765"
+    environment:
+      - DIFY_WORKFLOW_ENV=development
+      - DIFY_WORKFLOW_DB_URL=sqlite:///data/workflows.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - .:/app
+      - /app/__pycache__
+    command: python -m uvicorn web.app:app --host 0.0.0.0 --port 8765 --reload
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dify_workflow
+      POSTGRES_USER: dify
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dify_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  api-with-db:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8765:8765"
+    environment:
+      - DIFY_WORKFLOW_ENV=production
+      - DIFY_WORKFLOW_DB_URL=postgresql+asyncpg://dify:${DB_PASSWORD:-dify_password}@postgres:5432/dify_workflow
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./workflows:/app/workflows
+    restart: unless-stopped
+
+  # Worker for background tasks
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      - DIFY_WORKFLOW_ENV=production
+      - DIFY_WORKFLOW_DB_URL=postgresql+asyncpg://dify:${DB_PASSWORD:-dify_password}@postgres:5432/dify_workflow
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    command: python -c "from dify_workflow.batch import run_worker; run_worker()"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

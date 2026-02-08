@@ -7,11 +7,14 @@ Usage:
     dify-workflow build <file>   # Build workflow from Python file
     dify-workflow ai "description"  # AI-powered generation
     dify-workflow visualize <file>  # Visualize workflow
+    dify-workflow import <file>  # Import Dify YAML to Python
 """
 
 import argparse
 import sys
 import os
+
+from .constants import NODE_CLASS_MAP
 
 
 def cmd_interactive(args):
@@ -153,7 +156,7 @@ def cmd_build(args):
 def cmd_validate(args):
     """Validate a workflow YAML file"""
     import yaml
-    from .workflow import DSL_VERSION
+    from .constants import DSL_VERSION
     
     filepath = args.file
     
@@ -220,7 +223,8 @@ def cmd_visualize(args):
         StartNode, EndNode, AnswerNode, LLMNode, HTTPNode,
         CodeNode, IfElseNode, TemplateNode, KnowledgeNode,
         VariableAggregatorNode, IterationNode, QuestionClassifierNode,
-        ParameterExtractorNode, ToolNode,
+        ParameterExtractorNode, ToolNode, AssignerNode,
+        DocumentExtractorNode, ListFilterNode,
     )
     
     filepath = args.file
@@ -260,6 +264,9 @@ def cmd_visualize(args):
         "question-classifier": QuestionClassifierNode,
         "parameter-extractor": ParameterExtractorNode,
         "tool": ToolNode,
+        "assigner": AssignerNode,
+        "document-extractor": DocumentExtractorNode,
+        "list-filter": ListFilterNode,
     }
     
     # Recreate nodes
@@ -409,6 +416,278 @@ def cmd_template(args):
         print(f"[OK] Created {output} from template '{name}'")
 
 
+def cmd_analyze(args):
+    """Analyze a workflow file"""
+    import yaml
+    from .constants import DSL_VERSION
+    
+    filepath = args.file
+    
+    if not os.path.exists(filepath):
+        print(f"Error: File not found: {filepath}")
+        sys.exit(1)
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+    
+    app = data.get("app", {})
+    workflow = data.get("workflow", {})
+    graph = workflow.get("graph", {})
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    
+    print(f"\n{'='*50}")
+    print(f"Workflow Analysis: {app.get('name', 'Unknown')}")
+    print(f"{'='*50}")
+    
+    # Basic stats
+    print(f"\n[Basic Info]")
+    print(f"  Mode: {app.get('mode', 'unknown')}")
+    print(f"  Description: {app.get('description', 'N/A')[:60]}")
+    print(f"  DSL Version: {data.get('version', 'unknown')}")
+    
+    # Node stats
+    print(f"\n[Nodes] Total: {len(nodes)}")
+    node_types = {}
+    for node in nodes:
+        node_type = node.get("data", {}).get("type", "unknown")
+        node_types[node_type] = node_types.get(node_type, 0) + 1
+    
+    for node_type, count in sorted(node_types.items()):
+        print(f"  - {node_type:20}: {count}")
+    
+    # Edge stats
+    print(f"\n[Edges] Total: {len(edges)}")
+    
+    # Complexity metrics
+    print(f"\n[Complexity Metrics]")
+    # Cyclomatic complexity approximation (edges - nodes + 2)
+    if len(nodes) > 0:
+        complexity = len(edges) - len(nodes) + 2
+        print(f"  Cyclomatic Complexity: ~{complexity}")
+    
+    # Check for cycles (simplified)
+    node_ids = {n.get("id") for n in nodes}
+    adjacency = {nid: [] for nid in node_ids}
+    for edge in edges:
+        src = edge.get("source")
+        tgt = edge.get("target")
+        if src in adjacency and tgt in adjacency:
+            adjacency[src].append(tgt)
+    
+    # Find start nodes
+    targets = {edge.get("target") for edge in edges}
+    start_nodes = [n for n in nodes if n.get("id") not in targets]
+    print(f"  Start Nodes: {len(start_nodes)}")
+    
+    # Find end nodes
+    sources = {edge.get("source") for edge in edges}
+    end_nodes = [n for n in nodes if n.get("id") not in sources]
+    print(f"  End Nodes: {len(end_nodes)}")
+    
+    print(f"\n{'='*50}\n")
+
+
+def cmd_docs(args):
+    """Generate documentation for a workflow"""
+    from .docs import generate_docs
+    
+    filepath = args.file
+    format = args.format or "markdown"
+    output = args.output
+    
+    if not os.path.exists(filepath):
+        print(f"Error: File not found: {filepath}")
+        sys.exit(1)
+    
+    # Import the workflow first
+    import yaml
+    from .workflow import Workflow
+    from .nodes import (
+        StartNode, EndNode, AnswerNode, LLMNode, HTTPNode,
+        CodeNode, IfElseNode, TemplateNode, KnowledgeNode,
+        VariableAggregatorNode, IterationNode, QuestionClassifierNode,
+        ParameterExtractorNode, ToolNode, AssignerNode,
+        DocumentExtractorNode, ListFilterNode,
+    )
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+    
+    # Reconstruct workflow
+    app = data.get("app", {})
+    graph = data.get("workflow", {}).get("graph", {})
+    
+    wf = Workflow(
+        name=app.get("name", "Workflow"),
+        mode=app.get("mode", "workflow"),
+        description=app.get("description", ""),
+    )
+    
+    node_classes = {
+        "start": StartNode, "end": EndNode, "answer": AnswerNode,
+        "llm": LLMNode, "http-request": HTTPNode, "code": CodeNode,
+        "if-else": IfElseNode, "template-transform": TemplateNode,
+        "knowledge-retrieval": KnowledgeNode, "variable-aggregator": VariableAggregatorNode,
+        "iteration": IterationNode, "question-classifier": QuestionClassifierNode,
+        "parameter-extractor": ParameterExtractorNode, "tool": ToolNode,
+        "assigner": AssignerNode, "document-extractor": DocumentExtractorNode,
+        "list-filter": ListFilterNode,
+    }
+    
+    for node_data in graph.get("nodes", []):
+        data_section = node_data.get("data", {})
+        node_type = data_section.get("type", "start")
+        title = data_section.get("title", node_type)
+        
+        node_class = node_classes.get(node_type, StartNode)
+        node = node_class(title=title)
+        node.id = node_data.get("id")
+        wf.nodes.append(node)
+    
+    wf.edges = graph.get("edges", [])
+    
+    # Generate docs
+    docs = generate_docs(wf, format=format)
+    
+    if output:
+        with open(output, 'w', encoding='utf-8') as f:
+            f.write(docs)
+        print(f"[OK] Documentation saved to {output}")
+    else:
+        print(docs)
+
+
+def cmd_profile(args):
+    """Profile a workflow for performance analysis"""
+    from .profiler import analyze_workflow
+    import yaml
+    from .workflow import Workflow
+    from .nodes import (
+        StartNode, EndNode, AnswerNode, LLMNode, HTTPNode,
+        CodeNode, IfElseNode, TemplateNode, KnowledgeNode,
+        VariableAggregatorNode, IterationNode, QuestionClassifierNode,
+        ParameterExtractorNode, ToolNode, AssignerNode,
+        DocumentExtractorNode, ListFilterNode,
+    )
+    
+    filepath = args.file
+    
+    if not os.path.exists(filepath):
+        print(f"Error: File not found: {filepath}")
+        sys.exit(1)
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+    
+    # Reconstruct workflow
+    app = data.get("app", {})
+    graph = data.get("workflow", {}).get("graph", {})
+    
+    wf = Workflow(
+        name=app.get("name", "Workflow"),
+        mode=app.get("mode", "workflow"),
+        description=app.get("description", ""),
+    )
+    
+    node_classes = {
+        "start": StartNode, "end": EndNode, "answer": AnswerNode,
+        "llm": LLMNode, "http-request": HTTPNode, "code": CodeNode,
+        "if-else": IfElseNode, "template-transform": TemplateNode,
+        "knowledge-retrieval": KnowledgeNode, "variable-aggregator": VariableAggregatorNode,
+        "iteration": IterationNode, "question-classifier": QuestionClassifierNode,
+        "parameter-extractor": ParameterExtractorNode, "tool": ToolNode,
+        "assigner": AssignerNode, "document-extractor": DocumentExtractorNode,
+        "list-filter": ListFilterNode,
+    }
+    
+    for node_data in graph.get("nodes", []):
+        data_section = node_data.get("data", {})
+        node_type = data_section.get("type", "start")
+        title = data_section.get("title", node_type)
+        
+        node_class = node_classes.get(node_type, StartNode)
+        node = node_class(title=title)
+        node.id = node_data.get("id")
+        wf.nodes.append(node)
+    
+    wf.edges = graph.get("edges", [])
+    
+    # Analyze
+    profile = analyze_workflow(wf)
+    
+    from .profiler import WorkflowProfiler
+    profiler = WorkflowProfiler()
+    profiler.print_report(profile)
+
+
+def cmd_diff(args):
+    """Compare two workflow files"""
+    import yaml
+    
+    file1, file2 = args.files
+    
+    if not os.path.exists(file1):
+        print(f"Error: File not found: {file1}")
+        sys.exit(1)
+    if not os.path.exists(file2):
+        print(f"Error: File not found: {file2}")
+        sys.exit(1)
+    
+    with open(file1, 'r', encoding='utf-8') as f:
+        data1 = yaml.safe_load(f)
+    with open(file2, 'r', encoding='utf-8') as f:
+        data2 = yaml.safe_load(f)
+    
+    print(f"\nComparing:")
+    print(f"  A: {file1}")
+    print(f"  B: {file2}")
+    print(f"\n{'='*50}\n")
+    
+    # Compare names
+    name1 = data1.get("app", {}).get("name", "Unknown")
+    name2 = data2.get("app", {}).get("name", "Unknown")
+    if name1 != name2:
+        print(f"[Name] A: '{name1}' vs B: '{name2}'")
+    
+    # Compare nodes
+    nodes1 = {n.get("id"): n for n in data1.get("workflow", {}).get("graph", {}).get("nodes", [])}
+    nodes2 = {n.get("id"): n for n in data2.get("workflow", {}).get("graph", {}).get("nodes", [])}
+    
+    only_in_a = set(nodes1.keys()) - set(nodes2.keys())
+    only_in_b = set(nodes2.keys()) - set(nodes1.keys())
+    in_both = set(nodes1.keys()) & set(nodes2.keys())
+    
+    if only_in_a:
+        print(f"[Nodes] Only in A: {len(only_in_a)}")
+        for nid in only_in_a:
+            node_type = nodes1[nid].get("data", {}).get("type", "unknown")
+            print(f"  - {nodes1[nid].get('data', {}).get('title', nid)} ({node_type})")
+    
+    if only_in_b:
+        print(f"[Nodes] Only in B: {len(only_in_b)}")
+        for nid in only_in_b:
+            node_type = nodes2[nid].get("data", {}).get("type", "unknown")
+            print(f"  - {nodes2[nid].get('data', {}).get('title', nid)} ({node_type})")
+    
+    # Compare edges
+    edges1 = {(e.get("source"), e.get("target")) for e in data1.get("workflow", {}).get("graph", {}).get("edges", [])}
+    edges2 = {(e.get("source"), e.get("target")) for e in data2.get("workflow", {}).get("graph", {}).get("edges", [])}
+    
+    only_edges_a = edges1 - edges2
+    only_edges_b = edges2 - edges1
+    
+    if only_edges_a:
+        print(f"[Edges] Only in A: {len(only_edges_a)}")
+    if only_edges_b:
+        print(f"[Edges] Only in B: {len(only_edges_b)}")
+    
+    if not (only_in_a or only_in_b or only_edges_a or only_edges_b):
+        print("[Result] Workflows are identical in structure")
+    
+    print(f"\n{'='*50}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Dify Workflow Generator CLI",
@@ -422,6 +701,9 @@ Examples:
   dify-workflow build my_workflow.py -o output.yml
   dify-workflow validate workflow.yml
   dify-workflow visualize workflow.yml --format tree
+  dify-workflow import workflow.yml -o workflow.py
+  dify-workflow analyze workflow.yml
+  dify-workflow diff workflow1.yml workflow2.yml
         """,
     )
     
@@ -513,6 +795,41 @@ Examples:
     p_tpl_create.add_argument("-o", "--output", help="Output file path")
     
     p_tpl.set_defaults(func=cmd_template)
+    
+    # Analyze command
+    p_analyze = subparsers.add_parser(
+        "analyze", aliases=["a"],
+        help="Analyze a workflow file"
+    )
+    p_analyze.add_argument("file", help="YAML file to analyze")
+    p_analyze.set_defaults(func=cmd_analyze)
+    
+    # Diff command
+    p_diff = subparsers.add_parser(
+        "diff", aliases=["d"],
+        help="Compare two workflow files"
+    )
+    p_diff.add_argument("files", nargs=2, help="Two YAML files to compare")
+    p_diff.set_defaults(func=cmd_diff)
+    
+    # Docs command
+    p_docs = subparsers.add_parser(
+        "docs",
+        help="Generate documentation for a workflow"
+    )
+    p_docs.add_argument("file", help="YAML file to document")
+    p_docs.add_argument("-f", "--format", choices=["markdown", "html", "json"],
+                        default="markdown", help="Output format")
+    p_docs.add_argument("-o", "--output", help="Output file path")
+    p_docs.set_defaults(func=cmd_docs)
+    
+    # Profile command
+    p_profile = subparsers.add_parser(
+        "profile",
+        help="Profile a workflow for performance analysis"
+    )
+    p_profile.add_argument("file", help="YAML file to profile")
+    p_profile.set_defaults(func=cmd_profile)
     
     args = parser.parse_args()
     

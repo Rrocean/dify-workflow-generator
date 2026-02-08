@@ -1,0 +1,81 @@
+{
+  "Dify Workflow Template": {
+    "prefix": "dify-workflow",
+    "description": "Create a new Dify workflow",
+    "body": [
+      "version: '0.5.0'",
+      "kind: app",
+      "app:",
+      "  name: ${1:My Workflow}",
+      "  mode: workflow",
+      "  description: ${2:Workflow description}",
+      "workflow:",
+      "  graph:",
+      "    nodes:",
+      "      - id: start",
+      "        data:",
+      "          type: start",
+      "          title: Start",
+      "          variables:",
+      "            - variable: ${3:input}",
+      "              type: string",
+      "              required: true",
+      "      - id: llm",
+      "        data:",
+      "          type: llm",
+      "          title: LLM",
+      "          prompt: '{{#start.${3}#}}'",
+      "      - id: end",
+      "        data:",
+      "          type: end",
+      "          title: End",
+      "    edges:",
+      "      - source: start",
+      "        target: llm",
+      "      - source: llm",
+      "        target: end"
+    ]
+  },
+  "Dify LLM Node": {
+    "prefix": "dify-llm",
+    "description": "Add an LLM node",
+    "body": [
+      "- id: ${1:llm_node}",
+      "  data:",
+      "    type: llm",
+      "    title: ${2:LLM Node}",
+      "    prompt: '${3:{{#start.input#}}}'",
+      "    model:",
+      "      provider: openai",
+      "      name: gpt-4"
+    ]
+  },
+  "Dify HTTP Node": {
+    "prefix": "dify-http",
+    "description": "Add an HTTP node",
+    "body": [
+      "- id: ${1:http_node}",
+      "  data:",
+      "    type: http",
+      "    title: ${2:HTTP Request}",
+      "    method: GET",
+      "    url: '${3:https://api.example.com}'"
+    ]
+  },
+  "Dify If-Else Node": {
+    "prefix": "dify-if",
+    "description": "Add an If-Else condition node",
+    "body": [
+      "- id: ${1:condition}",
+      "  data:",
+      "    type: if-else",
+      "    title: ${2:Condition}",
+      "    conditions:",
+      "      - variable_selector:",
+      "          - start",
+      "          - ${3:input}",
+      "        comparison_operator: contains",
+      "        value: '${4:keyword}'"
+    ]
+  }
+}

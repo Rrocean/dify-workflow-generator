@@ -5,30 +5,13 @@ Importer module for converting Dify DSL YAML to Python code.
 import yaml
 from typing import Dict, Any, List
 
+from .constants import NODE_CLASS_MAP
+
+
 class DifyImporter:
     """
     Converts a Dify YAML file into a Python script using dify-workflow-generator.
     """
-    
-    NODE_CLASS_MAP = {
-        "start": "StartNode",
-        "end": "EndNode",
-        "answer": "AnswerNode",
-        "llm": "LLMNode",
-        "http-request": "HTTPNode",
-        "code": "CodeNode",
-        "if-else": "IfElseNode",
-        "variable-aggregator": "VariableAggregatorNode",
-        "template-transform": "TemplateNode",
-        "iteration": "IterationNode",
-        "knowledge-retrieval": "KnowledgeNode",
-        "question-classifier": "QuestionClassifierNode",
-        "parameter-extractor": "ParameterExtractorNode",
-        "tool": "ToolNode",
-        "assigner": "AssignerNode",
-        "document-extractor": "DocumentExtractorNode",
-        "list-filter": "ListFilterNode",
-    }
 
     def __init__(self, yaml_content: str):
         self.data = yaml.safe_load(yaml_content)
@@ -63,7 +46,7 @@ class DifyImporter:
         
         # 3. Nodes
         code.append(f"\n# Define Nodes")
-        node_var_map = {} # map node_id to python variable name
+        node_var_map = {}  # map node_id to python variable name
         
         for i, node in enumerate(self.nodes):
             node_data = node.get("data", {})
@@ -73,7 +56,8 @@ class DifyImporter:
             
             # Sanitize title for variable name
             var_name = "".join(c if c.isalnum() else "_" for c in title).lower()
-            if var_name[0].isdigit(): var_name = f"n_{var_name}"
+            if var_name[0].isdigit():
+                var_name = f"n_{var_name}"
             
             # Avoid duplicate var names
             base_var = var_name
@@ -84,7 +68,7 @@ class DifyImporter:
             
             node_var_map[node_id] = var_name
             
-            class_name = self.NODE_CLASS_MAP.get(node_type, "Node")
+            class_name = NODE_CLASS_MAP.get(node_type, "Node")
             self.imports.add(class_name)
             
             code.append(f"\n# Node: {title}")
@@ -98,10 +82,6 @@ class DifyImporter:
                 
             code.append(f")")
             # Force ID to match original for connections to work perfectly
-            # code.append(f'{var_name}.id = "{node_id}"') 
-            # Actually, better to rely on connection mapping, but forcing ID ensures 
-            # var references inside prompts {{#id.var#}} still work if we don't rewrite them.
-            # So, let's keep the ID.
             code.append(f'{var_name}.id = "{node_id}"')
 
         # 4. Add Nodes
@@ -171,12 +151,11 @@ class DifyImporter:
             # Extract inner conditions from the weird Dify logical_operator structure
             if conds:
                 # Dify DSL structure is complex here, simplifying for basic import
-                # Usually conds[0]['conditions']
                 try:
                     inner_conds = conds[0].get("conditions", [])
                     props.append(f"conditions={repr(inner_conds)}")
                     props.append(f'logical_operator="{conds[0].get("logical_operator", "and")}"')
-                except:
+                except Exception:
                     props.append(f"conditions={repr(conds)}")
 
         elif node_type == "answer":
@@ -186,10 +165,45 @@ class DifyImporter:
             props.append(f"dataset_ids={repr(data.get('dataset_ids', []))}")
             props.append(f"query_variable_selector={repr(data.get('query_variable_selector', []))}")
 
-        # Add generic handlers for others by dumping data fields if needed
-        # For now, this covers the main ones.
-        
+        elif node_type == "variable-aggregator":
+            props.append(f"variables={repr(data.get('variables', []))}")
+            props.append(f'output_type="{data.get("output_type", "string")}"')
+
+        elif node_type == "template-transform":
+            props.append(f'"template="{data.get("template", "")}"""')
+            props.append(f"variables={repr(data.get('variables', []))}")
+
+        elif node_type == "iteration":
+            props.append(f"iterator_selector={repr(data.get('iterator_selector', []))}")
+            props.append(f"output_selector={repr(data.get('output_selector', []))}")
+
+        elif node_type == "question-classifier":
+            props.append(f"model={repr(data.get('model', {}))}")
+            props.append(f"query_variable_selector={repr(data.get('query_variable_selector', []))}")
+            props.append(f"classes={repr(data.get('classes', []))}")
+
+        elif node_type == "parameter-extractor":
+            props.append(f"model={repr(data.get('model', {}))}")
+            props.append(f"query_variable_selector={repr(data.get('query_variable_selector', []))}")
+            props.append(f"parameters={repr(data.get('parameters', []))}")
+
+        elif node_type == "tool":
+            props.append(f'provider_id="{data.get("provider_id", "")}"')
+            props.append(f'provider_type="{data.get("provider_type", "builtin")}"')
+            props.append(f'tool_name="{data.get("tool_name", "")}"')
+
+        elif node_type == "assigner":
+            props.append(f'target_variable="{data.get("target_variable", "")}"')
+            props.append(f"source_variable_selector={repr(data.get('variable_selector', []))}")
+
+        elif node_type == "document-extractor":
+            props.append(f"variable_selector={repr(data.get('variable_selector', []))}")
+
+        elif node_type == "list-filter":
+            props.append(f"variable_selector={repr(data.get('variable_selector', []))}")
+
         return props
+
 
 def import_workflow(yaml_path: str, output_path: str = None):
     """Import a YAML file and write Python code."""

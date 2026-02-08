@@ -42,6 +42,7 @@ def create_translator_workflow():
             },
         ]
     )
+    start.id = "start"  # Set explicit ID for easier referencing
     
     # LLM node for translation
     translate = LLMNode(
@@ -117,6 +118,7 @@ def create_chatbot_workflow():
             },
         ]
     )
+    start.id = "start"
     
     # LLM with conversation memory
     llm = LLMNode(
@@ -175,6 +177,7 @@ def create_conditional_workflow():
             {"name": "query", "type": "string", "required": True},
         ]
     )
+    start.id = "start"
     
     # Condition to check if query is about code
     condition = IfElseNode(

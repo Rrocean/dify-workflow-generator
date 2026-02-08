@@ -20,6 +20,7 @@ from .nodes import (
     StartNode, EndNode, AnswerNode, LLMNode, HTTPNode,
     CodeNode, IfElseNode, TemplateNode, KnowledgeNode,
 )
+from .constants import NODE_ICONS, MERMAID_SHAPES
 
 
 @dataclass
@@ -562,17 +563,11 @@ class WorkflowVisualizer:
             node_type = node._node_type
             title = node.title or node_type
             
-            # Different shapes for different types
-            if node_type == "start":
-                lines.append(f"    {node.id}(({title}))")
-            elif node_type in ("end", "answer"):
-                lines.append(f"    {node.id}[/{title}/]")
-            elif node_type == "if-else":
-                lines.append(f"    {node.id}{{{title}}}")
-            elif node_type == "llm":
-                lines.append(f"    {node.id}[[\"{title}\"]]")
-            else:
-                lines.append(f"    {node.id}[\"{title}\"]")
+            # Escape special characters for Mermaid
+            title_escaped = title.replace('"', '"').replace('[', '(').replace(']', ')')
+            
+            shape = MERMAID_SHAPES.get(node_type, MERMAID_SHAPES["default"])
+            lines.append(f"    {node.id}{shape.format(title=title_escaped)})")
         
         lines.append("")
         
@@ -629,20 +624,7 @@ class WorkflowVisualizer:
             node_type = node._node_type
             title = node.title or node_type
             
-            # Node type icons
-            icons = {
-                "start": "[>]",
-                "end": "[=]",
-                "answer": "[<]",
-                "llm": "[*]",
-                "http-request": "[@]",
-                "code": "[#]",
-                "if-else": "[?]",
-                "knowledge-retrieval": "[K]",
-                "template-transform": "[T]",
-                "iteration": "[~]",
-            }
-            icon = icons.get(node_type, "[+]")
+            icon = NODE_ICONS.get(node_type, "[+]")
             
             lines.append(f"{prefix}{connector}{icon} {title}")
             

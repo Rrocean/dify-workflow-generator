@@ -1,0 +1,149 @@
+{
+  "name": "dify-workflow",
+  "displayName": "Dify Workflow",
+  "description": "Language support for Dify workflow files",
+  "version": "0.1.0",
+  "publisher": "dify",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Visualization"
+  ],
+  "keywords": [
+    "dify",
+    "workflow",
+    "ai",
+    "llm",
+    "yaml"
+  ],
+  "activationEvents": [
+    "onLanguage:yaml",
+    "onCommand:dify.preview"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "dify-workflow",
+        "aliases": ["Dify Workflow", "dify-workflow"],
+        "extensions": [".dify.yml", ".dify.yaml"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/icon-light.svg",
+          "dark": "./icons/icon-dark.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "dify-workflow",
+        "scopeName": "source.dify",
+        "path": "./syntaxes/dify.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "dify.preview",
+        "title": "Preview Workflow",
+        "category": "Dify",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "dify.validate",
+        "title": "Validate Workflow",
+        "category": "Dify"
+      },
+      {
+        "command": "dify.visualize",
+        "title": "Visualize Workflow",
+        "category": "Dify"
+      },
+      {
+        "command": "dify.exportPython",
+        "title": "Export to Python",
+        "category": "Dify"
+      },
+      {
+        "command": "dify.deploy",
+        "title": "Deploy to Dify",
+        "category": "Dify"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "dify.preview",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "dify.validate",
+          "group": "dify@1"
+        },
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "dify.visualize",
+          "group": "dify@2"
+        },
+        {
+          "when": "resourceExtname == .yml || resourceExtname == .yaml",
+          "command": "dify.exportPython",
+          "group": "dify@3"
+        }
+      ]
+    },
+    "snippets": [
+      {
+        "language": "yaml",
+        "path": "./snippets/dify.json"
+      }
+    ],
+    "configuration": {
+      "title": "Dify Workflow",
+      "properties": {
+        "dify.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8765",
+          "description": "Dify Workflow Generator API URL"
+        },
+        "dify.autoValidate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically validate workflows on save"
+        },
+        "dify.previewTheme": {
+          "type": "string",
+          "enum": ["light", "dark"],
+          "default": "light",
+          "description": "Preview theme"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "18.x",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "axios": "^1.6.2"
+  }
+}

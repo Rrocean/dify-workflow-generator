@@ -1,0 +1,89 @@
+version: 0.5.0
+kind: app
+app:
+  name: Translator
+  mode: workflow
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  description: ''
+  use_icon_as_answer_icon: false
+workflow:
+  graph:
+    nodes:
+    - id: 86014f49
+      position:
+        x: 100
+        y: 300
+      width: 244
+      height: 54
+      data:
+        type: start
+        title: Start
+        desc: ''
+        variables:
+        - variable: text
+          type: string
+          label: text
+          required: true
+          max_length: 256
+          default: ''
+          options: []
+        - variable: lang
+          type: string
+          label: lang
+          required: false
+          max_length: 256
+          default: English
+          options: []
+    - id: 1636028c
+      position:
+        x: 400
+        y: 100
+      width: 244
+      height: 54
+      data:
+        type: llm
+        title: Translate
+        desc: ''
+        model:
+          provider: openai
+          name: gpt-4
+          mode: chat
+          completion_params:
+            temperature: 0.7
+            max_tokens: 4096
+        prompt_template:
+        - role: user
+          text: 'Translate the following text to {{#start.lang#}}:
+
+
+            {{#start.text#}}'
+    - id: 5cbdbba7
+      position:
+        x: 700
+        y: 100
+      width: 244
+      height: 54
+      data:
+        type: end
+        title: End
+        desc: ''
+        outputs:
+        - variable: result
+          value_selector:
+          - Translate
+          - text
+    edges:
+    - id: edge_0
+      source: 86014f49
+      target: 1636028c
+      sourceHandle: source
+      targetHandle: target
+    - id: edge_1
+      source: 1636028c
+      target: 5cbdbba7
+      sourceHandle: source
+      targetHandle: target
+  features: {}
+  environment_variables: []
+  conversation_variables: []

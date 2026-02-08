@@ -1,0 +1,170 @@
+version: 0.5.0
+kind: app
+app:
+  name: AI 智能问数
+  mode: workflow
+  icon: 📊
+  icon_background: '#FFEAD5'
+  description: 将自然语言转换为 SQL 查询并分析数据结果
+  use_icon_as_answer_icon: false
+workflow:
+  graph:
+    nodes:
+    - id: start
+      position:
+        x: 100
+        y: 300
+      width: 244
+      height: 54
+      data:
+        type: start
+        title: Start
+        desc: ''
+        variables:
+        - variable: query
+          type: string
+          label: 数据问题
+          required: true
+          max_length: 256
+          default: ''
+          options: []
+        - variable: table_schema
+          type: string
+          label: 表结构
+          required: false
+          max_length: 256
+          default: CREATE TABLE sales (date DATE, amount DECIMAL, region VARCHAR)
+          options: []
+    - id: d7579be0
+      position:
+        x: 400
+        y: 100
+      width: 244
+      height: 54
+      data:
+        type: llm
+        title: 生成SQL
+        desc: ''
+        model:
+          provider: openai
+          name: gpt-4
+          mode: chat
+          completion_params:
+            temperature: 0.7
+            max_tokens: 4096
+        prompt_template:
+        - role: user
+          text: '你是一个数据分析师。根据以下表结构，将用户问题转换为 SQL 查询语句。
+
+
+            表结构：
+
+            {{#start.table_schema#}}
+
+
+            用户问题：
+
+            {{#start.query#}}
+
+
+            请只输出 SQL 语句，不要包含其他解释。'
+    - id: f3dc8e41
+      position:
+        x: 700
+        y: 100
+      width: 244
+      height: 54
+      data:
+        type: code
+        title: 执行查询
+        desc: ''
+        code_language: python3
+        code: "def main(args):\n    sql = args.get(\"sql\")\n    # 这里模拟数据库返回结果\n \
+          \   # 实际项目中，这里会连接数据库执行 SQL\n    print(f\"Executing: {sql}\")\n    \n   \
+          \ mock_data = [\n        {\"date\": \"2024-01-01\", \"amount\": 1000, \"\
+          region\": \"North\"},\n        {\"date\": \"2024-01-02\", \"amount\": 1500,\
+          \ \"region\": \"South\"}\n    ]\n    \n    return {\n        \"result\"\
+          : mock_data,\n        \"status\": \"success\"\n    }\n"
+        variables:
+        - variable: sql
+          value_selector:
+          - 生成SQL
+          - text
+        outputs:
+        - variable: result
+          type: array-object
+    - id: 70e52fd5
+      position:
+        x: 100
+        y: 300
+      width: 244
+      height: 54
+      data:
+        type: llm
+        title: 分析结果
+        desc: ''
+        model:
+          provider: openai
+          name: gpt-4
+          mode: chat
+          completion_params:
+            temperature: 0.7
+            max_tokens: 4096
+        prompt_template:
+        - role: user
+          text: '根据执行的 SQL 和数据结果，回答用户的问题。
+
+
+            问题：{{#start.query#}}
+
+            SQL：{{#生成SQL.text#}}
+
+            数据结果：
+
+            {{#执行查询.result#}}
+
+
+            请用通俗易懂的语言总结数据洞察。'
+    - id: 743de7ae
+      position:
+        x: 400
+        y: 300
+      width: 244
+      height: 54
+      data:
+        type: end
+        title: End
+        desc: ''
+        outputs:
+        - variable: answer
+          value_selector:
+          - 分析结果
+          - text
+        - variable: sql
+          value_selector:
+          - 生成SQL
+          - text
+    edges:
+    - id: edge_0
+      source: start
+      target: d7579be0
+      sourceHandle: source
+      targetHandle: target
+    - id: edge_1
+      source: d7579be0
+      target: f3dc8e41
+      sourceHandle: source
+      targetHandle: target
+    - id: edge_2
+      source: f3dc8e41
+      target: 70e52fd5
+      sourceHandle: source
+      targetHandle: target
+    - id: edge_3
+      source: 70e52fd5
+      target: 743de7ae
+      sourceHandle: source
+      targetHandle: target
+  features: {}
+  environment_variables: []
+  conversation_variables: []

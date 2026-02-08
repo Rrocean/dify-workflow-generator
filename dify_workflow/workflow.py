@@ -9,9 +9,11 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import yaml
 
 from .nodes import Node, StartNode, EndNode
+from .constants import DSL_VERSION
+from .exceptions import ValidationError, ConnectionError
+from .logging_config import get_logger
 
-# Current DSL version supported by Dify
-DSL_VERSION = "0.5.0"
+logger = get_logger("workflow")
 
 
 class Workflow:
@@ -42,7 +44,10 @@ class Workflow:
         icon_background: str = "#FFEAD5",
     ):
         if mode not in ("workflow", "advanced-chat"):
-            raise ValueError(f"Invalid mode: {mode}. Must be 'workflow' or 'advanced-chat'")
+            raise ValidationError(
+                f"Invalid mode: {mode}. Must be 'workflow' or 'advanced-chat'",
+                {"mode": mode, "valid_modes": ["workflow", "advanced-chat"]}
+            )
         
         self.name = name
         self.mode = mode
@@ -102,9 +107,27 @@ class Workflow:
             target: Target node or node ID
             source_handle: Source handle name (use "true"/"false" for if-else branches)
             target_handle: Target handle name
+            
+        Raises:
+            ConnectionError: If source or target node is not found
         """
         source_id = source.id if isinstance(source, Node) else source
         target_id = target.id if isinstance(target, Node) else target
+        
+        # Validate nodes exist
+        node_ids = {n.id for n in self.nodes}
+        if source_id not in node_ids:
+            raise ConnectionError(
+                f"Source node '{source_id}' not found in workflow",
+                source_id=source_id,
+                target_id=target_id
+            )
+        if target_id not in node_ids:
+            raise ConnectionError(
+                f"Target node '{target_id}' not found in workflow",
+                source_id=source_id,
+                target_id=target_id
+            )
         
         edge = {
             "id": f"edge_{self._edge_counter}",
@@ -116,6 +139,7 @@ class Workflow:
         
         self._edge_counter += 1
         self.edges.append(edge)
+        logger.debug(f"Connected {source_id} -> {target_id} ({source_handle})")
         return self
     
     def get_node(self, node_id: str) -> Optional[Node]:
@@ -234,6 +258,84 @@ class Workflow:
         
         print(f"[OK] Exported workflow to {path}")
     
+    def auto_layout(self, start_x: int = 100, start_y: int = 300,
+                    horizontal_spacing: int = 300,
+                    vertical_spacing: int = 200) -> "Workflow":
+        """
+        Automatically layout nodes in a grid based on connectivity.
+        
+        Args:
+            start_x: Starting X position
+            start_y: Starting Y position
+            horizontal_spacing: Horizontal distance between nodes
+            vertical_spacing: Vertical distance between nodes
+            
+        Returns:
+            Self for chaining
+        """
+        from .utils import auto_layout_nodes
+        auto_layout_nodes(self.nodes, self.edges, start_x, start_y,
+                         horizontal_spacing, vertical_spacing)
+        return self
+
+    def get_execution_order(self) -> List[str]:
+        """
+        Determine the execution order of nodes using topological sort.
+        
+        Returns:
+            List of node IDs in execution order
+            
+        Raises:
+            ValueError: If the workflow contains cycles
+        """
+        from .utils import find_execution_order
+        return find_execution_order(self.nodes, self.edges)
+
+    def find_isolated_nodes(self) -> List[Node]:
+        """Find nodes that are not connected to any other nodes."""
+        from .utils import find_isolated_nodes
+        return find_isolated_nodes(self.nodes, self.edges)
+
+    def clone(self, name: Optional[str] = None) -> "Workflow":
+        """
+        Create a deep copy of this workflow.
+        
+        Args:
+            name: Optional new name for the cloned workflow
+            
+        Returns:
+            New cloned Workflow
+        """
+        from .utils import clone_node
+        
+        new_wf = Workflow(
+            name=name or f"{self.name} (Copy)",
+            mode=self.mode,
+            description=self.description,
+            icon=self.icon,
+            icon_background=self.icon_background,
+        )
+        
+        # Clone all nodes
+        node_map = {}
+        for node in self.nodes:
+            new_node = clone_node(node)
+            node_map[node.id] = new_node
+            new_wf.add_node(new_node)
+        
+        # Clone edges
+        for edge in self.edges:
+            new_edge = {
+                "id": edge["id"],
+                "source": node_map.get(edge["source"], edge["source"]).id,
+                "target": node_map.get(edge["target"], edge["target"]).id,
+                "sourceHandle": edge.get("sourceHandle", "source"),
+                "targetHandle": edge.get("targetHandle", "target"),
+            }
+            new_wf.edges.append(new_edge)
+        
+        return new_wf
+
     def validate(self) -> List[str]:
         """
         Validate the workflow structure.
@@ -278,9 +380,11 @@ class Workflow:
             for ref_node_id, ref_var in refs:
                 # Handle title references (if user used title instead of ID)
                 if ref_node_id not in node_map and ref_node_id not in node_titles:
-                     # It might be a conversation variable
+                     # It might be a conversation variable or system variable
                      if ref_node_id not in ["sys", "env", "conversation"]:
-                        issues.append(f"Error: Node '{node.title}' references unknown node '{ref_node_id}'")
+                        # Also allow special IDs like "start" which is commonly used
+                        if ref_node_id != "start":
+                            issues.append(f"Error: Node '{node.title}' references unknown node '{ref_node_id}'")
             
             # Pattern for value selectors: ['node_id', 'var']
             # This is harder to regex reliably on string repr, but we can try a basic check

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dify-workflow-generator"
-version = "0.3.0"
+version = "0.5.0"
 description = "Programmatically generate Dify-compatible workflow DSL files"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,17 +25,43 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Code Generators",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "pyyaml>=6.0",
+    "Jinja2>=3.1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
 ]
 interactive = [
     "openai>=1.0",
+]
+web = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0",
+    "websockets>=12.0",
+]
+database = [
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
+]
+all = [
+    "openai>=1.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0",
+    "websockets>=12.0",
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
 ]
 
 [project.scripts]

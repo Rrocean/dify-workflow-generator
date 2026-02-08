@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'dify_workflow/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'dify_workflow/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - '.github/workflows/**'
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,web,interactive]"
+
+    - name: Lint with ruff
+      run: |
+        ruff check dify_workflow
+        ruff format --check dify_workflow
+
+    - name: Type check with mypy
+      run: mypy dify_workflow --ignore-missing-imports
+
+    - name: Test with pytest
+      run: pytest tests/ -v --cov=dify_workflow --cov-report=xml --cov-report=html
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      run: |
+        docker build --target production -t dify-workflow:latest .
+        docker build --target development -t dify-workflow:dev .
+
+    - name: Test Docker image
+      run: |
+        docker run -d -p 8765:8765 --name test-container dify-workflow:latest
+        sleep 5
+        curl -f http://localhost:8765/api/templates || exit 1
+        docker stop test-container
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Bandit security check
+      uses: PyCQA/bandit@main
+      with:
+        args: "-r dify_workflow -f json -o bandit-report.json || true"
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: bandit-report.json
