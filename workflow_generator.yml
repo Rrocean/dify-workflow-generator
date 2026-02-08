@@ -1,0 +1,426 @@
+# Dify Workflow Generator - Meta Workflow
+# 这是一个"生成工作流的工作流"，导入 Dify 后可通过对话生成其他工作流
+# DSL Version: 0.5.0
+
+app:
+  name: Dify工作流生成器
+  mode: advanced-chat
+  icon: 🤖
+  description: 通过自然语言描述，自动生成可导入的 Dify 工作流 YAML
+  use_icon_as_answer_icon: false
+
+workflow:
+  # ========== 节点定义 ==========
+  nodes:
+    # ---- 开始节点 ----
+    - id: start
+      type: start
+      title: 开始
+      position:
+        x: 80
+        y: 300
+      data:
+        variables:
+          - name: requirement
+            type: string
+            description: 描述你想要创建的工作流（如：一个翻译工作流，输入文本和目标语言）
+            required: true
+          - name: workflow_name
+            type: string
+            description: 工作流名称（可选，默认自动生成）
+            required: false
+
+    # ---- 意图分析节点 ----
+    - id: intent_analysis
+      type: llm
+      title: 意图分析
+      position:
+        x: 300
+        y: 300
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 2000
+        prompt_template:
+          - role: system
+            text: |
+              你是 Dify 工作流分析专家。分析用户的需求，提取关键信息。
+
+              输出格式（JSON）：
+              {
+                "workflow_type": "工作流类型",
+                "input_variables": ["输入变量列表"],
+                "output_format": "输出格式",
+                "key_nodes": ["需要的节点类型"],
+                "complexity": "simple|medium|complex"
+              }
+          - role: user
+            text: |
+              分析以下工作流需求：
+
+              {{#start.requirement#}}
+
+              工作流名称：{{#start.workflow_name#}}
+
+              请分析并返回 JSON 格式的分析结果。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: start.workflow_name
+            value_selector: ["start", "workflow_name"]
+
+    # ---- 架构设计节点 ----
+    - id: architecture_design
+      type: llm
+      title: 架构设计
+      position:
+        x: 550
+        y: 200
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.4
+            max_tokens: 4000
+        prompt_template:
+          - role: system
+            text: |
+              你是 Dify 工作流架构师。根据分析结果设计工作流的整体结构。
+
+              设计内容：
+              1. 节点类型和数量
+              2. 节点连接关系
+              3. 变量传递路径
+              4. 错误处理策略
+
+              输出格式：
+              - 架构概述
+              - 节点清单（类型、ID、功能）
+              - 数据流描述
+          - role: user
+            text: |
+              基于以下分析结果设计工作流架构：
+
+              {{#intent_analysis.text#}}
+
+              原始需求：{{#start.requirement#}}
+
+              请提供详细的架构设计。
+        variables:
+          - name: intent_analysis.text
+            value_selector: ["intent_analysis", "text"]
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+
+    # ---- 节点实现节点 ----
+    - id: node_implementation
+      type: llm
+      title: 节点实现
+      position:
+        x: 550
+        y: 400
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 6000
+        prompt_template:
+          - role: system
+            text: |
+              你是 Dify 工作流实现专家。根据架构设计生成完整的 DSL YAML。
+
+              必须遵循的规则：
+              1. 使用有效的 Dify DSL 0.5.0 格式
+              2. 所有节点必须有唯一的 ID
+              3. 使用正确的变量引用格式 {{#node_id.variable_name#}}
+              4. 包含所有必需字段（position, data 等）
+              5. 确保节点连接顺序合理
+
+              输出格式：
+              直接输出完整的 YAML（从 app: 开始），不要添加 markdown 代码块标记。
+          - role: user
+            text: |
+              根据以下架构设计生成完整的 Dify 工作流 YAML：
+
+              架构设计：
+              {{#architecture_design.text#}}
+
+              原始需求：
+              {{#start.requirement#}}
+
+              工作流名称：{{#start.workflow_name#}}
+
+              请生成完整的、可直接导入 Dify 的 YAML 文件内容。
+        variables:
+          - name: architecture_design.text
+            value_selector: ["architecture_design", "text"]
+          - name: intent_analysis.text
+            value_selector: ["intent_analysis", "text"]
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: start.workflow_name
+            value_selector: ["start", "workflow_name"]
+
+    # ---- DSL 验证节点 ----
+    - id: dsl_validation
+      type: llm
+      title: DSL验证
+      position:
+        x: 800
+        y: 300
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.2
+            max_tokens: 4000
+        prompt_template:
+          - role: system
+            text: |
+              你是 Dify DSL 验证专家。检查并修复 YAML 中的问题。
+
+              检查项：
+              1. YAML 语法正确性
+              2. 所有节点 ID 唯一
+              3. 变量引用格式正确
+              4. 必需的节点字段完整
+              5. 节点连接逻辑合理
+
+              修复原则：
+              - 保留原始设计意图
+              - 只修复语法/格式问题
+              - 不要改变功能逻辑
+
+              输出格式：
+              直接输出修复后的完整 YAML（从 app: 开始）。
+          - role: user
+            text: |
+              验证并修复以下 DSL：
+
+              {{#node_implementation.text#}}
+
+              请检查问题并返回修复后的 YAML。
+        variables:
+          - name: node_implementation.text
+            value_selector: ["node_implementation", "text"]
+
+    # ---- 格式清理节点 ----
+    - id: yaml_cleanup
+      type: code
+      title: YAML清理
+      position:
+        x: 1050
+        y: 300
+      data:
+        code_language: python3
+        code: |
+          import re
+
+          def main(yaml_text: str) -> dict:
+              # 提取 YAML 内容（移除可能的 markdown 代码块）
+              text = yaml_text.strip()
+              
+              # 移除 markdown 代码块标记
+              if text.startswith('```yaml'):
+                  text = text[7:]
+              elif text.startswith('```yml'):
+                  text = text[6:]
+              elif text.startswith('```'):
+                  text = text[3:]
+              
+              if text.endswith('```'):
+                  text = text[:-3]
+              
+              text = text.strip()
+              
+              # 确保以 app: 开头
+              if not text.startswith('app:'):
+                  # 尝试找到 app: 的位置
+                  match = re.search(r'\napp:', text)
+                  if match:
+                      text = text[match.start() + 1:]
+              
+              return {
+                  "clean_yaml": text,
+                  "ready_for_export": text.startswith('app:') or text.startswith('workflow:')
+              }
+        inputs:
+          - name: yaml_text
+            value_selector: ["dsl_validation", "text"]
+        outputs:
+          - name: clean_yaml
+            type: string
+          - name: ready_for_export
+            type: boolean
+
+    # ---- 文档生成节点 ----
+    - id: doc_generation
+      type: llm
+      title: 生成文档
+      position:
+        x: 800
+        y: 500
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.5
+            max_tokens: 3000
+        prompt_template:
+          - role: system
+            text: |
+              你是技术文档编写专家。为生成的工作流编写使用说明。
+
+              文档内容：
+              1. 工作流功能概述
+              2. 输入参数说明
+              3. 使用步骤
+              4. 示例输入
+              5. 注意事项
+
+              输出格式：Markdown
+          - role: user
+            text: |
+              为以下工作流生成文档：
+
+              原始需求：{{#start.requirement#}}
+
+              意图分析：{{#intent_analysis.text#}}
+
+              请提供简洁明了的使用文档。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: intent_analysis.text
+            value_selector: ["intent_analysis", "text"]
+
+    # ---- 最终输出节点 ----
+    - id: final_output
+      type: template
+      title: 最终输出
+      position:
+        x: 1300
+        y: 300
+      data:
+        template: |
+          # 生成的工作流
+
+          ## 使用说明
+          {{#doc_generation.text#}}
+
+          ---
+
+          ## 导出的 YAML（可直接复制到 Dify）
+
+          ```yaml
+          {{#yaml_cleanup.clean_yaml#}}
+          ```
+
+          ---
+
+          ## 导入步骤
+          1. 复制上方 YAML 内容
+          2. 在 Dify 中选择 "导入 DSL 文件"
+          3. 粘贴 YAML 内容
+          4. 点击确认导入
+
+          **状态**: {{#yaml_cleanup.ready_for_export??生成成功:可导入✅:需要检查⚠️#}}
+        variables:
+          - name: doc_generation.text
+            value_selector: ["doc_generation", "text"]
+          - name: yaml_cleanup.clean_yaml
+            value_selector: ["yaml_cleanup", "clean_yaml"]
+          - name: yaml_cleanup.ready_for_export
+            value_selector: ["yaml_cleanup", "ready_for_export"]
+
+    # ---- 结束节点 ----
+    - id: end
+      type: end
+      title: 结束
+      position:
+        x: 1550
+        y: 300
+      data:
+        outputs:
+          - name: generated_workflow
+            value_selector: ["yaml_cleanup", "clean_yaml"]
+            description: 生成的工作流 YAML
+          - name: documentation
+            value_selector: ["doc_generation", "text"]
+            description: 使用文档
+          - name: export_ready
+            value_selector: ["yaml_cleanup", "ready_for_export"]
+            description: 是否可导出
+
+  # ========== 节点连接 ==========
+  edges:
+    - id: start_to_intent
+      source: start
+      target: intent_analysis
+      type: direct
+
+    - id: intent_to_arch
+      source: intent_analysis
+      target: architecture_design
+      type: direct
+
+    - id: intent_to_impl
+      source: intent_analysis
+      target: node_implementation
+      type: direct
+
+    - id: arch_to_impl
+      source: architecture_design
+      target: node_implementation
+      type: direct
+
+    - id: impl_to_validation
+      source: node_implementation
+      target: dsl_validation
+      type: direct
+
+    - id: validation_to_cleanup
+      source: dsl_validation
+      target: yaml_cleanup
+      type: direct
+
+    - id: cleanup_to_output
+      source: yaml_cleanup
+      target: final_output
+      type: direct
+
+    - id: impl_to_doc
+      source: node_implementation
+      target: doc_generation
+      type: direct
+
+    - id: intent_to_doc
+      source: intent_analysis
+      target: doc_generation
+      type: direct
+
+    - id: doc_to_output
+      source: doc_generation
+      target: final_output
+      type: direct
+
+    - id: output_to_end
+      source: final_output
+      target: end
+      type: direct
+
+  environment_variables: []
+  conversation_variables: []

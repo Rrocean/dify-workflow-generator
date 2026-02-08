@@ -122,6 +122,30 @@ cd web && python app.py
 # Open http://localhost:8000 in your browser
 ```
 
+#### Method 5: Meta-Workflow (Workflow that generates workflows)
+
+导入 `workflow_generator_agent_teams.yml` 到 Dify，创建一个**生成工作流的工作流**！
+
+```bash
+# 在 Dify 中导入元工作流
+# 然后通过对话生成其他工作流
+```
+
+使用方式：
+1. 将 `workflow_generator_agent_teams.yml` 导入 Dify
+2. 在对话框中描述你想要的工作流
+3. 系统会自动生成可导入的 YAML 代码
+
+**示例对话：**
+```
+用户：创建一个智能客服工作流，需要分析用户意图并路由到不同处理节点
+
+系统：生成完成！以下是工作流 YAML...
+[生成可直接导入的 YAML 代码]
+```
+
+详见 [workflow_generator_readme.md](workflow_generator_readme.md)
+
 ---
 
 ## 📚 Documentation
@@ -242,6 +266,83 @@ dify-workflow-generator/
 ├── Dockerfile              # Docker image
 └── docker-compose.yml      # Docker compose
 ```
+
+---
+
+## 🤖 Agent Teams 支持
+
+本项目支持 **Anthropic Claude Opus 4.6 Agent Teams** 功能，实现多代理并行协作生成工作流。
+
+### 什么是 Agent Teams？
+
+Agent Teams 允许多个 AI 代理并行工作，每个代理负责特定任务：
+
+| 代理 | 职责 |
+|------|------|
+| 需求分析师 | 分析用户需求，提取关键信息 |
+| 架构师 | 设计工作流整体结构 |
+| 技术顾问 | 推荐技术方案 |
+| 实现师 | 编写 DSL YAML 代码 |
+| 验证师 | 检查 DSL 正确性 |
+| 优化师 | 提升性能和可维护性 |
+| 文档师 | 生成使用文档 |
+
+### 使用方式
+
+#### 1. CLI 方式
+```bash
+# 交互式模式
+python cli_workflow_generator.py -i
+
+# 命令行模式
+python cli_workflow_generator.py \
+  -r "创建一个翻译工作流" \
+  -n "智能翻译器" \
+  -c medium \
+  -m parallel
+```
+
+#### 2. Python API
+```python
+from cli_workflow_generator import CLIWorkflowGenerator
+
+async def generate():
+    generator = CLIWorkflowGenerator(api_key="your-key")
+    result = await generator.generate(
+        requirement="创建一个客服机器人工作流",
+        workflow_name="客服机器人",
+        complexity="complex"
+    )
+
+    # 保存生成的 YAML
+    with open("output.yml", "w") as f:
+        f.write(result["workflow_yaml"])
+```
+
+#### 3. Dify 元工作流
+
+直接导入 `workflow_generator_agent_teams.yml` 到 Dify，在 Dify 内部使用多代理生成工作流！
+
+详见 [workflow_generator_readme.md](workflow_generator_readme.md)
+
+### 降级方案
+
+如果没有 Opus 4.6 访问权限，可以使用降级方案：
+
+```python
+from agent_teams_fallback import AgentTeamsFallback, FallbackMode
+
+fallback = AgentTeamsFallback(
+    anthropic_key="your-key",
+    mode=FallbackMode.PARALLEL_SONNET  # 使用 Claude 3.5 Sonnet 并行
+)
+```
+
+支持的模式：
+- `SEQUENTIAL` - 单代理顺序执行（最省钱）
+- `PARALLEL_SONNET` - Claude 3.5 Sonnet 并行（推荐）
+- `MULTI_LLM` - Claude + GPT 混合
+- `LOCAL_MOCK` - 本地模拟（无需 API）
 
 ---
 

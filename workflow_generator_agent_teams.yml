@@ -1,0 +1,680 @@
+# Dify Workflow Generator - Agent Teams 版本
+# 使用多代理并行架构生成工作流
+# 导入 Dify 后，通过对话形式生成其他工作流
+# DSL Version: 0.5.0
+
+app:
+  name: AgentTeams工作流生成器
+  mode: advanced-chat
+  icon: 🚀
+  description: 使用多代理并行架构，智能生成高质量 Dify 工作流
+  use_icon_as_answer_icon: false
+
+workflow:
+  # ========== 节点定义 ==========
+  nodes:
+    # ---- 开始节点 ----
+    - id: start
+      type: start
+      title: 开始
+      position:
+        x: 80
+        y: 400
+      data:
+        variables:
+          - name: requirement
+            type: string
+            description: 描述你想要创建的工作流（如：一个客服机器人，能回答订单相关问题）
+            required: true
+          - name: workflow_name
+            type: string
+            description: 工作流名称（可选）
+            required: false
+          - name: complexity
+            type: string
+            description: 复杂度 (simple/medium/complex，默认 auto)
+            required: false
+
+    # ---- 需求分析代理 (Agent 1) ----
+    - id: agent_requirement_analyst
+      type: llm
+      title: 需求分析代理
+      position:
+        x: 350
+        y: 150
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 2000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Requirement Analyst】
+
+              你是专业的需求分析师。深入理解用户需求，提取关键要素。
+
+              分析维度：
+              1. 核心功能需求
+              2. 输入/输出数据
+              3. 业务规则
+              4. 边界条件
+              5. 隐含需求
+
+              输出严格的 JSON 格式：
+              {
+                "core_functions": ["功能1", "功能2"],
+                "inputs": [{"name": "", "type": "", "description": ""}],
+                "outputs": [{"name": "", "type": "", "description": ""}],
+                "business_rules": ["规则1"],
+                "estimated_nodes": 数字,
+                "complexity": "simple|medium|complex",
+                "special_requirements": ["特殊需求"]
+              }
+          - role: user
+            text: |
+              分析以下工作流需求：
+
+              {{#start.requirement#}}
+
+              复杂度要求：{{#start.complexity#}}
+
+              请返回 JSON 格式的分析结果。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: start.complexity
+            value_selector: ["start", "complexity"]
+
+    # ---- 架构师代理 (Agent 2) - 并行 ----
+    - id: agent_architect
+      type: llm
+      title: 工作流架构师
+      position:
+        x: 350
+        y: 400
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.4
+            max_tokens: 3000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Workflow Architect】
+
+              你是 Dify 工作流架构专家。设计高可用、易维护的工作流架构。
+
+              设计原则：
+              1. 单一职责：每个节点只做一件事
+              2. 合理分层：输入→处理→输出
+              3. 错误处理：考虑异常情况
+              4. 可扩展性：预留扩展空间
+
+              输出格式：
+              {
+                "architecture_pattern": "sequential|parallel|conditional|iterative",
+                "nodes": [
+                  {"id": "", "type": "", "purpose": "", "dependencies": []}
+                ],
+                "data_flow": "描述数据如何流动",
+                "error_handling": "错误处理策略"
+              }
+          - role: user
+            text: |
+              为以下需求设计工作流架构：
+
+              {{#start.requirement#}}
+
+              请返回架构设计方案。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+
+    # ---- 技术顾问代理 (Agent 3) - 并行 ----
+    - id: agent_tech_advisor
+      type: llm
+      title: 技术顾问
+      position:
+        x: 350
+        y: 650
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 2000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Technical Advisor】
+
+              你是技术选型专家。为工作流推荐最适合的技术方案。
+
+              评估维度：
+              1. 模型选择（根据任务复杂度）
+              2. 工具/API 需求
+              3. 性能优化建议
+              4. 成本估算
+
+              输出格式：
+              {
+                "recommended_model": "模型名称及理由",
+                "tools_needed": ["工具1"],
+                "optimization_tips": ["建议1"],
+                "estimated_cost": "成本估算"
+              }
+          - role: user
+            text: |
+              为以下需求提供技术建议：
+
+              {{#start.requirement#}}
+
+              请返回技术方案建议。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+
+    # ---- 变量聚合 - 汇总并行代理结果 ----
+    - id: aggregate_agent_outputs
+      type: variable-aggregator
+      title: 聚合代理输出
+      position:
+        x: 650
+        y: 400
+      data:
+        variables:
+          - name: requirement_analysis
+            value_selector: ["agent_requirement_analyst", "text"]
+          - name: architecture_design
+            value_selector: ["agent_architect", "text"]
+          - name: tech_advice
+            value_selector: ["agent_tech_advisor", "text"]
+
+    # ---- 节点实现代理 (Agent 4) ----
+    - id: agent_implementer
+      type: llm
+      title: 节点实现师
+      position:
+        x: 900
+        y: 300
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.2
+            max_tokens: 8000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Node Implementer】
+
+              你是 Dify DSL 编码专家。根据架构设计生成精确的 YAML 代码。
+
+              DSL 规范要求：
+              1. 严格遵循 Dify DSL 0.5.0 格式
+              2. 每个节点必须有唯一 ID
+              3. 正确设置 position (x, y)
+              4. 变量引用使用 {{#node_id.variable#}} 格式
+              5. 所有必需的 data 字段必须填写
+              6. edges 必须正确连接 source 和 target
+
+              节点类型选择：
+              - start: 工作流入口
+              - end: 工作流结束
+              - llm: AI 处理节点
+              - code: Python/JavaScript 代码
+              - http: HTTP 请求
+              - if-else: 条件分支
+              - question-classifier: 意图分类
+              - knowledge-retrieval: 知识库检索
+              - template: 模板转换
+              - variable-aggregator: 变量聚合
+              - iteration: 迭代处理
+              - list-operator: 列表操作
+              - parameter-extractor: 参数提取
+
+              输出：完整的 YAML，从 app: 开始，不要 markdown 代码块。
+          - role: user
+            text: |
+              根据以下信息生成完整的工作流 YAML：
+
+              === 需求分析 ===
+              {{#aggregate_agent_outputs.requirement_analysis#}}
+
+              === 架构设计 ===
+              {{#aggregate_agent_outputs.architecture_design#}}
+
+              === 技术建议 ===
+              {{#aggregate_agent_outputs.tech_advice#}}
+
+              === 原始需求 ===
+              {{#start.requirement#}}
+
+              工作流名称：{{#start.workflow_name#}}
+
+              请生成完整的、可直接导入 Dify 的 YAML 文件。
+        variables:
+          - name: aggregate_agent_outputs.requirement_analysis
+            value_selector: ["aggregate_agent_outputs", "requirement_analysis"]
+          - name: aggregate_agent_outputs.architecture_design
+            value_selector: ["aggregate_agent_outputs", "architecture_design"]
+          - name: aggregate_agent_outputs.tech_advice
+            value_selector: ["aggregate_agent_outputs", "tech_advice"]
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: start.workflow_name
+            value_selector: ["start", "workflow_name"]
+
+    # ---- 验证代理 (Agent 5) - 并行 ----
+    - id: agent_validator
+      type: llm
+      title: DSL验证师
+      position:
+        x: 900
+        y: 550
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.1
+            max_tokens: 4000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: DSL Validator】
+
+              你是 DSL 验证专家。检查工作流的正确性和完整性。
+
+              验证清单：
+              ✓ YAML 语法有效
+              ✓ 所有节点 ID 唯一
+              ✓ 节点类型有效
+              ✓ edges 引用存在的节点
+              ✓ 变量引用格式正确
+              ✓ 开始和结束节点存在
+              ✓ 没有孤立节点
+
+              输出 JSON 格式：
+              {
+                "valid": true/false,
+                "issues": ["问题描述"],
+                "suggestions": ["改进建议"],
+                "risk_level": "low|medium|high"
+              }
+          - role: user
+            text: |
+              验证以下 DSL：
+
+              {{#agent_implementer.text#}}
+
+              请返回验证结果。
+        variables:
+          - name: agent_implementer.text
+            value_selector: ["agent_implementer", "text"]
+
+    # ---- 优化代理 (Agent 6) - 并行 ----
+    - id: agent_optimizer
+      type: llm
+      title: 性能优化师
+      position:
+        x: 900
+        y: 700
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.3
+            max_tokens: 3000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Performance Optimizer】
+
+              你是性能优化专家。提升工作流的执行效率。
+
+              优化方向：
+              1. 减少不必要的节点
+              2. 合并相似操作
+              3. 优化 LLM 调用
+              4. 建议缓存策略
+              5. 并行化机会
+
+              输出格式：
+              {
+                "optimizations": ["具体优化建议"],
+                "estimated_improvement": "预期提升",
+                "priority": "high|medium|low"
+              }
+          - role: user
+            text: |
+              分析以下工作流的优化机会：
+
+              {{#agent_implementer.text#}}
+
+              请返回优化建议。
+        variables:
+          - name: agent_implementer.text
+            value_selector: ["agent_implementer", "text"]
+
+    # ---- 变量聚合 - 汇总实现和验证 ----
+    - id: aggregate_validation
+      type: variable-aggregator
+      title: 汇总验证结果
+      position:
+        x: 1200
+        y: 450
+      data:
+        variables:
+          - name: implementation
+            value_selector: ["agent_implementer", "text"]
+          - name: validation
+            value_selector: ["agent_validator", "text"]
+          - name: optimization
+            value_selector: ["agent_optimizer", "text"]
+
+    # ---- YAML 清理 ----
+    - id: yaml_cleaner
+      type: code
+      title: YAML格式化
+      position:
+        x: 1450
+        y: 350
+      data:
+        code_language: python3
+        code: |
+          import re
+
+          def main(yaml_text: str) -> dict:
+              # 清理 markdown 代码块
+              text = yaml_text.strip()
+              
+              patterns = [
+                  r'^```yaml\s*\n',
+                  r'^```yml\s*\n',
+                  r'^```\s*\n',
+                  r'\n```\s*$',
+              ]
+              
+              for pattern in patterns:
+                  text = re.sub(pattern, '', text, flags=re.MULTILINE)
+              
+              text = text.strip()
+              
+              # 确保以 app: 开头
+              if not text.startswith('app:'):
+                  # 查找 app: 的位置
+                  idx = text.find('app:')
+                  if idx != -1:
+                      text = text[idx:]
+              
+              # 基础验证
+              has_app = text.startswith('app:')
+              has_nodes = 'nodes:' in text
+              has_edges = 'edges:' in text
+              
+              return {
+                  "yaml": text,
+                  "valid": has_app and has_nodes,
+                  "has_app": has_app,
+                  "has_nodes": has_nodes,
+                  "has_edges": has_edges,
+                  "length": len(text)
+              }
+        inputs:
+          - name: yaml_text
+            value_selector: ["aggregate_validation", "implementation"]
+        outputs:
+          - name: yaml
+            type: string
+          - name: valid
+            type: boolean
+          - name: has_app
+            type: boolean
+          - name: has_nodes
+            type: boolean
+
+    # ---- 文档代理 (Agent 7) ----
+    - id: agent_documenter
+      type: llm
+      title: 文档编写者
+      position:
+        x: 1450
+        y: 600
+      data:
+        model:
+          provider: anthropic
+          name: claude-3-5-sonnet-20241022
+          mode: chat
+          completion_params:
+            temperature: 0.5
+            max_tokens: 3000
+        prompt_template:
+          - role: system
+            text: |
+              【Agent Role: Technical Writer】
+
+              你是技术文档专家。编写清晰、实用的工作流文档。
+
+              文档结构：
+              1. 功能概述
+              2. 输入参数详解
+              3. 使用步骤
+              4. 示例场景
+              5. 注意事项
+              6. 故障排查
+
+              使用 Markdown 格式，包含 emoji 增强可读性。
+          - role: user
+            text: |
+              为以下工作流编写文档：
+
+              原始需求：{{#start.requirement#}}
+
+              验证结果：{{#aggregate_validation.validation#}}
+
+              优化建议：{{#aggregate_validation.optimization#}}
+
+              请提供完整的使用文档。
+        variables:
+          - name: start.requirement
+            value_selector: ["start", "requirement"]
+          - name: aggregate_validation.validation
+            value_selector: ["aggregate_validation", "validation"]
+          - name: aggregate_validation.optimization
+            value_selector: ["aggregate_validation", "optimization"]
+
+    # ---- 最终格式化 ----
+    - id: final_formatter
+      type: template
+      title: 最终格式化
+      position:
+        x: 1700
+        y: 450
+      data:
+        template: |
+          # 🚀 生成的工作流
+
+          ## 📋 使用文档
+          {{#agent_documenter.text#}}
+
+          ---
+
+          ## ⚙️ 技术详情
+
+          ### 验证结果
+          {{#aggregate_validation.validation#}}
+
+          ### 优化建议
+          {{#aggregate_validation.optimization#}}
+
+          ---
+
+          ## 📄 导出的 YAML
+
+          ```yaml
+          {{#yaml_cleaner.yaml#}}
+          ```
+
+          ---
+
+          ## 📥 导入步骤
+          1. 点击对话中的 "复制" 按钮复制上方 YAML
+          2. 进入 Dify 控制台 → 工作室
+          3. 点击 "导入 DSL 文件"
+          4. 粘贴 YAML 内容，点击确认
+          5. 完成导入后即可使用
+
+          ---
+
+          ✅ **状态**: {{#yaml_cleaner.valid??生成成功，可直接导入 ✅:需要人工检查 ⚠️#}}
+          📊 **节点数**: {{#yaml_cleaner.has_nodes??包含节点定义:未检测到节点#}}
+          🔗 **边连接**: {{#yaml_cleaner.has_edges??已配置连接:无边定义#}}
+
+        variables:
+          - name: agent_documenter.text
+            value_selector: ["agent_documenter", "text"]
+          - name: aggregate_validation.validation
+            value_selector: ["aggregate_validation", "validation"]
+          - name: aggregate_validation.optimization
+            value_selector: ["aggregate_validation", "optimization"]
+          - name: yaml_cleaner.yaml
+            value_selector: ["yaml_cleaner", "yaml"]
+          - name: yaml_cleaner.valid
+            value_selector: ["yaml_cleaner", "valid"]
+          - name: yaml_cleaner.has_nodes
+            value_selector: ["yaml_cleaner", "has_nodes"]
+          - name: yaml_cleaner.has_edges
+            value_selector: ["yaml_cleaner", "has_edges"]
+
+    # ---- 结束节点 ----
+    - id: end
+      type: end
+      title: 结束
+      position:
+        x: 1950
+        y: 450
+      data:
+        outputs:
+          - name: workflow_yaml
+            value_selector: ["yaml_cleaner", "yaml"]
+            description: 生成的工作流 YAML
+          - name: documentation
+            value_selector: ["agent_documenter", "text"]
+            description: 使用文档
+          - name: is_valid
+            value_selector: ["yaml_cleaner", "valid"]
+            description: 验证状态
+
+  # ========== 节点连接 ==========
+  edges:
+    # 开始 -> 三个并行代理
+    - id: start_to_analyst
+      source: start
+      target: agent_requirement_analyst
+      type: direct
+
+    - id: start_to_architect
+      source: start
+      target: agent_architect
+      type: direct
+
+    - id: start_to_advisor
+      source: start
+      target: agent_tech_advisor
+      type: direct
+
+    # 三个代理 -> 聚合
+    - id: analyst_to_aggregate
+      source: agent_requirement_analyst
+      target: aggregate_agent_outputs
+      type: direct
+
+    - id: architect_to_aggregate
+      source: agent_architect
+      target: aggregate_agent_outputs
+      type: direct
+
+    - id: advisor_to_aggregate
+      source: agent_tech_advisor
+      target: aggregate_agent_outputs
+      type: direct
+
+    # 聚合 -> 实现
+    - id: aggregate_to_impl
+      source: aggregate_agent_outputs
+      target: agent_implementer
+      type: direct
+
+    # 实现 -> 三个并行验证/优化/文档
+    - id: impl_to_validator
+      source: agent_implementer
+      target: agent_validator
+      type: direct
+
+    - id: impl_to_optimizer
+      source: agent_implementer
+      target: agent_optimizer
+      type: direct
+
+    # 实现/验证/优化 -> 汇总
+    - id: impl_to_validation_agg
+      source: agent_implementer
+      target: aggregate_validation
+      type: direct
+
+    - id: validator_to_validation_agg
+      source: agent_validator
+      target: aggregate_validation
+      type: direct
+
+    - id: optimizer_to_validation_agg
+      source: agent_optimizer
+      target: aggregate_validation
+      type: direct
+
+    # 汇总 -> 清理
+    - id: validation_to_cleaner
+      source: aggregate_validation
+      target: yaml_cleaner
+      type: direct
+
+    # 汇总 -> 文档
+    - id: validation_to_doc
+      source: aggregate_validation
+      target: agent_documenter
+      type: direct
+
+    # 清理/文档 -> 最终格式化
+    - id: cleaner_to_final
+      source: yaml_cleaner
+      target: final_formatter
+      type: direct
+
+    - id: doc_to_final
+      source: agent_documenter
+      target: final_formatter
+      type: direct
+
+    # 最终 -> 结束
+    - id: final_to_end
+      source: final_formatter
+      target: end
+      type: direct
+
+  environment_variables: []
+  conversation_variables: []

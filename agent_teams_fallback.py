@@ -82,7 +82,7 @@ class AgentTeamsFallback:
         context = f"原始需求: {requirements}\n\n"
 
         for stage_name, stage_prompt in stages:
-            print(f"\n▶️  阶段: {stage_name}")
+            print(f"\n>  阶段: {stage_name}")
 
             # 构建提示词
             prompt = f"""{stage_prompt}
@@ -97,7 +97,7 @@ class AgentTeamsFallback:
             results[stage_name] = result
             context += f"\n\n[{stage_name}]\n{result}\n"
 
-            print(f"✅ 完成: {stage_name}")
+            print(f"OK 完成: {stage_name}")
 
         return results
 
@@ -127,7 +127,7 @@ class AgentTeamsFallback:
         }
 
         # 并行执行第一波 (无依赖)
-        print("\n🚀 第一波并行任务 (架构设计)")
+        print("\n>> 第一波并行任务 (架构设计)")
         first_wave = await asyncio.gather(*[
             self._call_llm(prompt, model="claude-3-5-sonnet-20241022")
             for prompt in parallel_tasks.values()
@@ -149,7 +149,7 @@ API 设计:
 {wave1_results['api_design']}"""
 
         # 并行执行第二波 (依赖第一波)
-        print("\n🚀 第二波并行任务 (实现)")
+        print("\n>> 第二波并行任务 (实现)")
         second_wave_tasks = {
             "backend": f"根据以下设计实现后端代码:\n{context}",
             "frontend": f"根据以下设计实现前端代码:\n{context}",
@@ -164,7 +164,7 @@ API 设计:
         wave2_results = dict(zip(second_wave_tasks.keys(), second_wave))
 
         # 最终整合
-        print("\n🚀 最终整合")
+        print("\n>> 最终整合")
         final_prompt = f"""整合以下实现为完整工作流:
 
 后端:
@@ -214,13 +214,13 @@ API 设计:
 
         # 并行调用不同 API
         async def run_task(name: str, config: dict):
-            print(f"\n🤖 {name} ({config['model']}) 开始工作...")
+            print(f"\n[AI] {name} ({config['model']}) 开始工作...")
             result = await self._call_llm_api(
                 config['prompt'],
                 config['model'],
                 config['key']
             )
-            print(f"✅ {name} 完成")
+            print(f"OK {name} 完成")
             return name, result
 
         results = await asyncio.gather(*[
@@ -275,7 +275,7 @@ API 设计:
         # 模拟执行时间
         for key in results:
             await asyncio.sleep(0.2)  # 模拟处理时间
-            print(f"✅ {key} 完成")
+            print(f"OK {key} 完成")
 
         return results
 
@@ -410,7 +410,7 @@ API 设计:
         mode = mode or self.mode
 
         print(f"\n{'='*70}")
-        print(f"🚀 Agent Teams Fallback - {mode.value}")
+        print(f">> Agent Teams Fallback - {mode.value}")
         print(f"{'='*70}")
 
         if mode == FallbackMode.SEQUENTIAL:
@@ -459,7 +459,7 @@ async def main():
         mode=FallbackMode.SEQUENTIAL
     )
     result1 = await fallback1.develop(requirements)
-    print("\n✅ 顺序模式完成")
+    print("\nOK 顺序模式完成")
 
     # 方案 2: Sonnet 并行 (需要 Anthropic Key，速度最快)
     print("\n" + "="*70)
@@ -471,7 +471,7 @@ async def main():
         mode=FallbackMode.PARALLEL_SONNET
     )
     result2 = await fallback2.develop(requirements)
-    print("\n✅ 并行模式完成")
+    print("\nOK 并行模式完成")
 
     # 方案 3: 本地模拟 (无需 API，适合测试)
     print("\n" + "="*70)
@@ -480,7 +480,7 @@ async def main():
 
     fallback3 = AgentTeamsFallback(mode=FallbackMode.LOCAL_MOCK)
     result3 = await fallback3.develop(requirements)
-    print("\n✅ 模拟模式完成")
+    print("\nOK 模拟模式完成")
 
     # 保存结果
     with open("workflow_results.json", "w") as f:
@@ -496,7 +496,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    print("🚀 Agent Teams Fallback - 无需 Opus 4.6 的多代理方案")
+    print(">> Agent Teams Fallback - 无需 Opus 4.6 的多代理方案")
     print("="*70)
     print("\n可用方案:")
     print("1. 顺序模式 (Sequential) - 只需一个 API Key")
